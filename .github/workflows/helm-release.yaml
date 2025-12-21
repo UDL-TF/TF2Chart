@@ -49,7 +49,7 @@ jobs:
 
       - name: Push Helm chart to OCI registry
         run: |
-          helm push tf2-${{ steps.chart-version.outputs.version }}.tgz oci://ghcr.io/udl-tf/charts
+          helm push tf2chart-${{ steps.chart-version.outputs.version }}.tgz oci://ghcr.io/udl-tf/charts
 
       - name: Logout from GHCR
         if: always()

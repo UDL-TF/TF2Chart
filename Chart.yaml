@@ -3,4 +3,4 @@ name: tf2chart
 description: Helm chart for a host-based content merger with overlay layers and writable passthroughs.
 type: application
 version: 0.1.0
-appVersion: "1.0.0"
+appVersion: "0.1.0"

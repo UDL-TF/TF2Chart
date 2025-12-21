@@ -1,0 +1,105 @@
+replicaCount: 1
+
+workload:
+  kind: Deployment # Deployment or StatefulSet
+  deploymentStrategy:
+    type: Recreate
+
+statefulSet:
+  serviceName: ""
+  podManagementPolicy: OrderedReady
+  updateStrategy: {}
+  volumeClaimTemplates: []
+
+app:
+  name: tf2-merger
+  image:
+    repository: ghcr.io/udl-tf/tf2-image
+    tag: latest
+    pullPolicy: IfNotPresent
+  containerPort: 28015
+  ports:
+    - name: game-udp
+      containerPort: 28015
+      protocol: UDP
+  env: []
+  command: []
+  args: []
+  stdin: false
+  tty: false
+  livenessProbe: {}
+  readinessProbe: {}
+  startupProbe: {}
+  resources: {}
+  securityContext: {}
+  extraVolumeMounts: []
+  lifecycle: {}
+
+merger:
+  enabled: true
+  image:
+    repository: alpine
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources: {}
+  securityContext: {}
+  extraEnv: []
+  extraVolumeMounts: []
+
+initContainers:
+  pre: []
+  post: []
+
+permissionsInit:
+  enabled: true
+  image: busybox
+  imagePullPolicy: IfNotPresent
+  user: 1000
+  group: 1000
+  chmod: "775"
+  path: ""
+
+paths:
+  hostSource: /tf/standalone
+  hostPathType: Directory
+  containerTarget: /tf
+
+# The additive overlay layers that are merged in order.
+overlays:
+  - name: serverfiles
+    type: hostPath
+    path: /mnt/serverfiles
+    hostPathType: Directory
+
+# Writable passthrough directories that map directly to the base host path.
+writablePaths:
+  - tf/logs
+
+hostNetwork: false
+dnsPolicy: ""
+serviceAccountName: ""
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 28015
+  targetPort: 28015
+  ports:
+    - name: game-udp
+      port: 28015
+      targetPort: game-udp
+      protocol: UDP
+  nameOverride: ""
+  headless: false
+  clusterIP: ""
+  externalTrafficPolicy: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+extraVolumes: []

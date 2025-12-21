@@ -1,0 +1,20 @@
+{{- $workloadKind := lower (default "deployment" .Values.workload.kind) -}}
+{{- if eq $workloadKind "deployment" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tf2chart.fullname" . }}
+  labels:
+    {{- include "tf2chart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tf2chart.selectorLabels" . | nindent 6 }}
+  {{- with .Values.workload.deploymentStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "tf2chart.podTemplate" . | nindent 4 }}
+{{- end }}

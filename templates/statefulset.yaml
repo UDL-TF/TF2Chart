@@ -1,0 +1,26 @@
+{{- $workloadKind := lower (default "deployment" .Values.workload.kind) -}}
+{{- if eq $workloadKind "statefulset" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tf2chart.fullname" . }}
+  labels:
+    {{- include "tf2chart.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "tf2chart.serviceName" . }}
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: {{ .Values.statefulSet.podManagementPolicy | default "OrderedReady" }}
+  selector:
+    matchLabels:
+      {{- include "tf2chart.selectorLabels" . | nindent 6 }}
+  {{- with .Values.statefulSet.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "tf2chart.podTemplate" . | nindent 4 }}
+  {{- with .Values.statefulSet.volumeClaimTemplates }}
+  volumeClaimTemplates:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,9 @@
+# Helm ignore file
+# Patterns to ignore when packaging
+.DS_Store
+Thumbs.db
+?.swp
+.idea/
+.vscode/
+*.iml
+*.tgz

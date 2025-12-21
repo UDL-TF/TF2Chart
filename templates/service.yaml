@@ -1,0 +1,53 @@
+{{- if .Values.service.enabled }}
+{{- $svcName := include "tf2chart.serviceName" . -}}
+{{- $appPorts := default (list) .Values.app.ports -}}
+{{- $firstPort := dict "name" "" "port" .Values.app.containerPort -}}
+{{- if gt (len $appPorts) 0 -}}
+  {{- $first := index $appPorts 0 -}}
+  {{- if $first.name -}}
+    {{- $_ := set $firstPort "name" $first.name -}}
+  {{- end -}}
+  {{- if $first.containerPort -}}
+    {{- $_ := set $firstPort "port" $first.containerPort -}}
+  {{- end -}}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "tf2chart.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if .Values.service.headless }}
+  clusterIP: None
+  {{- else if .Values.service.clusterIP }}
+  clusterIP: {{ .Values.service.clusterIP }}
+  {{- end }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  selector:
+    {{- include "tf2chart.selectorLabels" . | nindent 4 }}
+  ports:
+    {{- if .Values.service.ports }}
+    {{- range $index, $port := .Values.service.ports }}
+    - name: {{ $port.name | default (printf "service-%v" $index) }}
+      port: {{ required (printf "service.ports[%d].port is required" $index) $port.port }}
+      targetPort: {{ if $port.targetPort }}{{ $port.targetPort }}{{ else if $port.name }}{{ $port.name }}{{ else }}{{ $port.port }}{{ end }}
+      protocol: {{ $port.protocol | default "TCP" }}
+      {{- if $port.nodePort }}
+      nodePort: {{ $port.nodePort }}
+      {{- end }}
+    {{- end }}
+    {{- else }}
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ if .Values.service.targetPort }}{{ .Values.service.targetPort }}{{ else if $firstPort.name }}{{ $firstPort.name }}{{ else }}{{ $firstPort.port }}{{ end }}
+      protocol: TCP
+    {{- end }}
+{{- end }}

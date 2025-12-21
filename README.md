@@ -1,0 +1,162 @@
+# TF2Chart
+
+Helm chart that builds a writable Team Fortress 2 content tree inside Kubernetes by stitching host-mounted layers, overlays, and passthrough directories.
+
+## Overview
+
+TF2Chart packages a battle-tested set of Kubernetes manifests that turn any node with TF2 server assets into a dynamically merged content source. It abstracts the tedious hostPath wiring, permissions management, and overlay stitching that TF2-based workloads typically require so operators can focus on gameplay tuning rather than storage mechanics.
+
+The chart deploys a `tf2-merger` pod that first normalizes file ownership, then creates a layered filesystem view combining the immutable base install, additive overlays, and writable passthrough directories. Once assembled, the main TF2 container can mount `/tf` as if it were a single coherent tree, even though the data originates from multiple heterogeneous storage targets.
+
+### Key Responsibilities
+
+- **Orchestrate**: Render Deployment or StatefulSet manifests with the correct labels, strategies, and replica counts.
+- **Merge**: Run the `stitcher` init container that links host base content, overlay volumes, and writable paths into a single view layer.
+- **Harden**: Optionally fix ownership and permissions before the merge to avoid runtime `EACCES` errors when pods run as non-root users.
+- **Expose**: Provision a Kubernetes Service (cluster IP or headless) tailored to the app ports, keeping UDP-heavy TF2 traffic addressable.
+
+## Architecture
+
+```mermaid
+graph TB
+  subgraph Host_Node
+    hostFS[/Host base path\n/tf/standalone/]
+    overlay1[/Overlay mount\n/mnt/serverfiles/]
+  end
+
+  subgraph Kubernetes_Cluster
+    helm[Helm Release: tf2chart]
+    controller[K8s Controller\nDeployment or StatefulSet]
+    pod[tf2-merger Pod]
+    subgraph Pod_Containers
+      initPerm[Init: permissions]
+      stitcher[Init: stitcher]
+      app[Container: tf2-merger]
+    end
+    svc[Service]
+  end
+
+  helm --> controller --> pod
+  pod --> initPerm --> stitcher --> app
+  hostFS --> initPerm
+  hostFS --> stitcher
+  overlay1 --> stitcher
+  stitcher --> app
+  app --> svc
+```
+
+## How It Works
+
+### Dynamic Merge Flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Op as Operator
+  participant Helm as Helm CLI
+  participant K8s as Kubernetes API
+  participant Pod as tf2-merger Pod
+  participant InitP as Init: permissions
+  participant Stitch as Init: stitcher
+  participant App as TF2 container
+
+  Op->>Helm: `helm install tf2chart ./`
+  Helm->>K8s: Submit manifests w/ values overrides
+  K8s-->>Op: Report Deployment/StatefulSet created
+  K8s->>Pod: Schedule pod on node with hostPath access
+  Pod->>InitP: Run permission fix script on /mnt/base
+  InitP-->>Pod: Exit 0 when ownership corrected
+  Pod->>Stitch: Run overlay stitcher script
+  Stitch->>Stitch: Link base + overlay layers into /tf
+  Stitch-->>Pod: Exit 0 when view layer ready
+  Pod->>App: Start TF2 container with merged volume
+  App-->>K8s: Expose UDP/TCP ports via Service
+```
+
+### Controller State Machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> InitRequested
+  InitRequested --> PermissionsFix : permissionsInit.enabled
+  InitRequested --> Stitching : permissionsInit disabled
+  PermissionsFix --> Stitching : chmod/chown success
+  PermissionsFix --> Error : chmod/chown failure
+  Stitching --> Ready : overlay merge complete
+  Stitching --> Error : missing layer or hostPath
+  Ready --> Updating : Helm upgrade or rollout restart
+  Updating --> Ready : replica available
+  Updating --> Error : rollout failure
+  Error --> [*]
+```
+
+## Features
+
+- **Flexible Workload Kind**: Toggle between Deployment and StatefulSet via `workload.kind` to match stateless or sticky TF2 workloads.
+- **Deterministic Overlay Merge**: Ordered `overlays` list ensures predictable layer precedence when linking assets into `/tf`.
+- **Writable Passthroughs**: `writablePaths` keep logs and configs persistent by pointing subpaths back to the host base directory.
+- **Optional Merger Bypass**: Disable `merger.enabled` to mount the host tree directly for debugging or trusted environments.
+- **Pre/Post Init Hooks**: `initContainers.pre` / `post` arrays let you inject custom scripts around the built-in steps.
+- **Permissions Guardrail**: `permissionsInit` container normalizes UID/GID/mode before the main workload starts.
+- **Service Customization**: Supports UDP/TCP combos, headless Services, and external traffic policies tailored to game networking.
+- **Security Controls**: Pass custom `securityContext`, node selectors, tolerations, and affinity for hard multi-tenancy boundaries.
+- **Resource Tuning**: Provide per-container `resources` blocks for both merger and application containers to avoid noisy neighbors.
+- **Extensible Volume Model**: Combine hostPath, PVC, ConfigMap, or Secret overlays plus arbitrary `extraVolumes` for advanced layouts.
+
+## Prerequisites
+
+- Kubernetes cluster v1.25+ with nodes that expose the TF2 host directories via hostPath.
+- Helm 3.12+ installed on the operator workstation or CI runner.
+- TF2 base installation replicated at `/tf/standalone` (or alternate `paths.hostSource`).
+- Steam Game Server Login Token (GSLT) for the TF2 server container.
+- Network policy or firewall rules that allow UDP 28015 (or chosen game port) between players and the cluster nodes.
+
+## Installation
+
+1. Clone or vendor the chart alongside your TF2 assets.
+2. Create a values file that points `paths.hostSource`, `overlays`, writable paths, and TF2 environment variables to your infrastructure.
+3. Deploy with Helm:
+   ```bash
+   helm upgrade --install tf2chart ./TF2Chart \
+     --namespace gameservers --create-namespace \
+     -f my-values.yaml
+   ```
+4. Verify the pod starts, overlays link correctly, and the Service exposes the expected UDP ports.
+
+## Configuration
+
+### Environment Variables
+
+| Variable            | Description                                                                   | Default              | Required |
+| ------------------- | ----------------------------------------------------------------------------- | -------------------- | -------- |
+| `SRCDS_TOKEN`       | Steam Game Server Login Token passed through `app.env` for TF2 authentication | ``                   | Yes      |
+| `SRCDS_PW`          | Optional password clients must enter before joining the server                | ``                   | No       |
+| `SRCDS_MAXPLAYERS`  | Maximum player slots advertised to the TF2 master servers                     | `24`                 | No       |
+| `SRCDS_REGION`      | Region code reported to matchmaking services                                  | `255`                | No       |
+| `TF2_CUSTOM_CONFIG` | Path to a custom configuration file mounted inside the view layer             | `/tf/cfg/server.cfg` | No       |
+
+## Development
+
+### Project Structure
+
+```
+TF2Chart/
+├── Chart.yaml                 # Helm metadata and semantic versions
+├── values.yaml                # Default settings for workloads, overlays, merger, service
+└── templates/
+    ├── _helpers.tpl           # Label helpers and naming utilities
+    ├── _podtemplate.tpl       # Shared pod spec with init containers and volumes
+    ├── deployment.yaml        # Deployment manifest renderer
+    ├── service.yaml           # Service definition with dynamic port wiring
+    └── statefulset.yaml       # StatefulSet manifest when workloads need stable IDs
+```
+
+## License
+
+See [LICENSE](LICENSE) file for details.
+
+## Dependencies
+
+- [tf2-image](https://github.com/UDL-TF/TF2Image) – Base container with SteamCMD tooling used by the `tf2-merger` workload.
+- [Helm](https://helm.sh/) – Package manager used to render and deploy the chart into Kubernetes.
+- [Kubernetes](https://kubernetes.io/) – Target platform providing Deployments, StatefulSets, and Services consumed by the chart.

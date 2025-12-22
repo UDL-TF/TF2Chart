@@ -61,6 +61,7 @@ merger:
       - moved_to
       - moved_from
     debounceSeconds: 2
+    pollIntervalSeconds: 300
     watchPaths: []
     command: []
     args: []

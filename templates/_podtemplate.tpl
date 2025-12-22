@@ -102,6 +102,7 @@ spec:
   {{- $watchEventArg := join "," $watchEvents }}
   {{- $debounceSeconds := default 2 $watcherValues.debounceSeconds }}
   {{- $installInotify := ne (default true $watcherValues.installInotifyTools) false }}
+  {{- $pollInterval := default 300 $watcherValues.pollIntervalSeconds }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -352,23 +353,54 @@ spec:
           WATCH_PATHS="{{ join " " $watchPaths }}"
           EVENTS="{{ $watchEventArg }}"
           DEBOUNCE={{ $debounceSeconds }}
+          POLL={{ $pollInterval }}
+          if [ "$POLL" -lt 0 ]; then
+            POLL=0
+          fi
           for path in $WATCH_PATHS; do
             [ -z "$path" ] && continue
             mkdir -p "$path"
           done
           if command -v inotifywait >/dev/null 2>&1; then
-            while true; do
-              inotifywait -qq -r -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1 || true
-              sleep "$DEBOUNCE"
-              run_merge
-            done
+            HAS_INOTIFY=1
           else
-            echo "inotifywait not available; falling back to periodic merge" >&2
-            while true; do
-              sleep "$DEBOUNCE"
-              run_merge
-            done
+            HAS_INOTIFY=0
+            echo "inotifywait not available; falling back to polling mode" >&2
           fi
+          while true; do
+            if [ "$HAS_INOTIFY" -eq 1 ]; then
+              if [ "$POLL" -gt 0 ]; then
+                if inotifywait -qq -r -t "$POLL" -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1; then
+                  sleep "$DEBOUNCE"
+                  run_merge
+                  continue
+                fi
+                STATUS=$?
+                if [ "$STATUS" -eq 2 ]; then
+                  echo "inotify timeout after $POLL seconds; running periodic merge"
+                  run_merge
+                  continue
+                fi
+                echo "inotifywait failed with status $STATUS; switching to polling mode" >&2
+                HAS_INOTIFY=0
+              else
+                if inotifywait -qq -r -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1; then
+                  sleep "$DEBOUNCE"
+                  run_merge
+                  continue
+                fi
+                STATUS=$?
+                echo "inotifywait failed with status $STATUS; switching to polling mode" >&2
+                HAS_INOTIFY=0
+              fi
+            fi
+            if [ "$POLL" -gt 0 ]; then
+              sleep "$POLL"
+            else
+              sleep "$DEBOUNCE"
+            fi
+            run_merge
+          done
       {{- end }}
       {{- with $watcherValues.env }}
       env:

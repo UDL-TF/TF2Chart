@@ -119,6 +119,7 @@ stateDiagram-v2
 - **Resource Tuning**: Provide per-container `resources` blocks for both merger and application containers to avoid noisy neighbors.
 - **Extensible Volume Model**: Combine hostPath, PVC, ConfigMap, or Secret overlays plus arbitrary `extraVolumes` for advanced layouts.
 - **Continuous Stitch Watcher**: An optional sidecar streams `inotify` events from git-sync overlays and re-runs the stitcher whenever new commits land, ensuring symlinks and runtime overlays stay fresh without restarting the pod.
+- **Self-Healing Links**: Each merge pass prunes dangling symlinks so deleted upstream files do not linger as broken entries inside `/tf`.
 
 ## Prerequisites
 
@@ -192,9 +193,10 @@ merger:
     installInotifyTools: true
     events: [close_write, create, delete, moved_to, moved_from]
     debounceSeconds: 2
+    pollIntervalSeconds: 300 # fallback cadence when inotify events are missing
 ```
 
-The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and falls back to a timed re-merge loop if the binary is unavailable. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
+The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and now keeps a background polling loop (`pollIntervalSeconds`) so merges happen even on filesystems that do not emit inotify events (for example, NFS). Each pass also removes dangling symlinks inside the view layer, preventing stale references when files are deleted upstream. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
 
 ## Development
 

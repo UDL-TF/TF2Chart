@@ -94,6 +94,9 @@ run_merge() {
 	{{- end }}
 	{{- end }}
 	{{- end }}
+	echo "--- 4. Removing dangling symlinks ---"
+	find "$TARGET_BASE" -xtype l -delete 2>/dev/null || true
+	find "$TARGET" -xtype l -delete 2>/dev/null || true
 	echo "--- tf2chart merge complete ---"
 }
 

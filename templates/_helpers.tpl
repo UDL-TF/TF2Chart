@@ -77,8 +77,10 @@ run_merge() {
 	{{- if $values.overlays }}
 	echo "Merging overlays into $TARGET"
 	{{- range $values.overlays }}
-	echo "Layer: {{ .name }}"
-	merge_dir "/mnt/overlays/{{ .name }}" "$TARGET"
+	{{- $sourcePath := trimPrefix "/" (default "" .sourcePath) }}
+	{{- $source := ternary (printf "/mnt/overlays/%s/%s" .name $sourcePath) (printf "/mnt/overlays/%s" .name) (ne $sourcePath "") }}
+	echo "Layer: {{ .name }} -> {{ $source }}"
+	merge_dir "{{ $source }}" "$TARGET"
 	{{- end }}
 	{{- end }}
 	{{- if $writable }}

@@ -110,6 +110,7 @@ overlays:
     type: hostPath
     path: /mnt/serverfiles
     # subPath: base
+    # sourcePath: serverfiles/base
     hostPathType: Directory
     readOnly: true
     watchParentDepth: 1

@@ -186,6 +186,18 @@ overlays:
     subPath: serverfiles/base # child directory to mount in the pod
     readOnly: true
 
+# If you still need to mount the entire parent (to survive git-sync
+# swaps) but only stitch a subdirectory, keep `path` pointing at the
+# stable parent and use `sourcePath` to tell the merger which child to
+# link into /tf. This avoids bind mounts going stale when git-sync
+# replaces the checkout while ensuring only the desired tree is merged.
+overlays:
+  - name: serverfiles-base
+    type: hostPath
+    path: /mnt/serverfiles
+    sourcePath: serverfiles/base
+    readOnly: true
+
 writablePaths:
   - path: tf/logs
     overlay: serverfiles-runtime

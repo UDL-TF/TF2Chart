@@ -175,6 +175,17 @@ overlays:
     hostPathType: DirectoryOrCreate
     readOnly: false
 
+# Mount only a nested directory from the hostPath by setting `subPath`.
+# This is handy when tools like git-sync delete and recreate the final
+# directory; by mounting the parent and using subPath, Kubernetes keeps
+# the bind mount stable while the child path is refreshed.
+overlays:
+  - name: serverfiles-base
+    type: hostPath
+    path: /mnt/serverfiles # parent directory on the host
+    subPath: serverfiles/base # child directory to mount in the pod
+    readOnly: true
+
 writablePaths:
   - path: tf/logs
     overlay: serverfiles-runtime

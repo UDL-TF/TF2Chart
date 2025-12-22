@@ -218,6 +218,9 @@ spec:
         {{- range .Values.overlays }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
+          {{- if .subPath }}
+          subPath: {{ .subPath }}
+          {{- end }}
         {{- end }}
         {{- with .Values.merger.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -298,6 +301,9 @@ spec:
         {{- $overlayReadOnly := default true .readOnly }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
+          {{- if .subPath }}
+          subPath: {{ .subPath }}
+          {{- end }}
           {{- if $overlayReadOnly }}
           readOnly: true
           {{- end }}
@@ -468,6 +474,9 @@ spec:
         {{- $overlayReadOnly := default true .readOnly }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
+          {{- if .subPath }}
+          subPath: {{ .subPath }}
+          {{- end }}
           {{- if $overlayReadOnly }}
           readOnly: true
           {{- end }}

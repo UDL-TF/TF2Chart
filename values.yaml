@@ -71,7 +71,7 @@ merger:
     resources: {}
     securityContext: {}
     extraVolumeMounts: []
-    watchBase: false
+    watchBase: true
 
 initContainers:
   pre: []

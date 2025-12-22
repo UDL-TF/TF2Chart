@@ -60,6 +60,8 @@ merger:
       - delete
       - moved_to
       - moved_from
+      - delete_self
+      - move_self
     debounceSeconds: 2
     pollIntervalSeconds: 300
     watchPaths: []
@@ -108,6 +110,8 @@ overlays:
     path: /mnt/serverfiles
     hostPathType: Directory
     readOnly: true
+    watchParentDepth: 0
+    extraWatchPaths: []
 
 # Writable passthrough directories that map directly to the base host path.
 writablePaths:

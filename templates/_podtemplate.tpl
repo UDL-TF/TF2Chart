@@ -89,9 +89,36 @@ spec:
     {{- end }}
   {{- end }}
   {{- $writablePaths := $writableList }}
-  {{- $defaultWatchPaths := list "/mnt/base" }}
+  {{- $watchSet := dict }}
+  {{- $defaultWatchPaths := list }}
+  {{- $baseWatch := "/mnt/base" }}
+  {{- $defaultWatchPaths = append $defaultWatchPaths $baseWatch }}
+  {{- $_ := set $watchSet $baseWatch true }}
   {{- range .Values.overlays }}
-    {{- $defaultWatchPaths = append $defaultWatchPaths (printf "/mnt/overlays/%s" .name) }}
+    {{- $mountPath := printf "/mnt/overlays/%s" .name }}
+    {{- if not (hasKey $watchSet $mountPath) }}
+      {{- $defaultWatchPaths = append $defaultWatchPaths $mountPath }}
+      {{- $_ := set $watchSet $mountPath true }}
+    {{- end }}
+    {{- $depth := int (default 0 .watchParentDepth) }}
+    {{- if gt $depth 0 }}
+      {{- $parentPath := trimSuffix "/" $mountPath }}
+      {{- range $i, $_depth := until $depth }}
+        {{- $parentPath = dir $parentPath }}
+        {{- if and $parentPath (ne $parentPath "") }}
+          {{- if not (hasKey $watchSet $parentPath) }}
+            {{- $defaultWatchPaths = append $defaultWatchPaths $parentPath }}
+            {{- $_ := set $watchSet $parentPath true }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- range $extra := (default (list) .extraWatchPaths) }}
+    {{- if and $extra (not (hasKey $watchSet $extra)) }}
+      {{- $defaultWatchPaths = append $defaultWatchPaths $extra }}
+      {{- $_ := set $watchSet $extra true }}
+      {{- end }}
+    {{- end }}
   {{- end }}
   {{- $configuredWatch := default (list) $watcherValues.watchPaths }}
   {{- $watchPaths := $configuredWatch }}

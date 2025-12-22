@@ -81,10 +81,21 @@ permissionsInit:
   enabled: true
   image: busybox
   imagePullPolicy: IfNotPresent
+  name: init-permissions
   user: 1000
   group: 1000
   chmod: "775"
   path: ""
+  volumeName: host-base
+  mountPath: /mnt/base
+  runFirst: true
+  runLast: true
+  postName: init-permissions-final
+  postPath: /tf
+  postMountPath: /tf
+  postVolume: view-layer
+  applyDuringMerge: true
+  applyPaths: []
 
 entrypointCopy:
   enabled: true

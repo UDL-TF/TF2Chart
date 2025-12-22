@@ -207,6 +207,22 @@ writablePaths:
 
 When an `overlay` is supplied, TF2Chart automatically mounts `layer-<overlay>` and points the writable subPath to that volume, keeping user uploads away from the git checkout. You can also provide `subPath` or `sourceMount` for advanced PVC layouts.
 
+### Permissions Enforcement
+
+`permissionsInit` now supports dual-phase execution and continuous ownership fixes so the merged `/tf` tree always stays writable by SteamCMD (UID 1000) even after overlays add new files.
+
+```yaml
+permissionsInit:
+  runFirst: true # chown /mnt/base before any stitching work
+  runLast: true # reapply ownership to the view layer before the app starts
+  postPath: /tf # defaults to the chart's container target
+  applyDuringMerge: true # the stitcher + watcher re-run chown/chmod after every merge
+  applyPaths:
+    - /tf # optional explicit list; defaults to postPath when omitted
+```
+
+The pre-phase still targets `/mnt/base` (or your custom `path`) so existing hostPath assets become writable, while the post-phase touches the view-layer `emptyDir` so any symlinked directories under `/tf/tf` inherit the correct UID/GID. Setting `applyDuringMerge: true` ensures both the stitcher init container and the watcher sidecar repair ownership after each merge cycle, keeping runtime installs (for example, `tar` extractions inside `/tf/tf/addons`) from landing as `root:root`.
+
 ### Merger Watcher Sidecar
 
 The new `merger.watcher` block enables a lightweight sidecar that watches `/mnt/base` (git-sync output) plus any declared overlays. It replays the stitcher logic whenever files change, so the rendered `/tf` view always reflects the latest commit without forcing pod restarts.

@@ -24,9 +24,21 @@ spec:
   {{- $permissionsInit := default (dict) .Values.permissionsInit }}
   {{- $permEnabled := and (ne (default true $permissionsInit.enabled) false) true }}
   {{- $permPath := default "/mnt/base" $permissionsInit.path }}
+  {{- $permName := default "init-permissions" $permissionsInit.name }}
+  {{- $permRunFirst := ne (default true $permissionsInit.runFirst) false }}
+  {{- $permRunLast := ne (default true $permissionsInit.runLast) false }}
+  {{- $permMountPath := default "/mnt/base" $permissionsInit.mountPath }}
+  {{- $permVolumeName := default "host-base" $permissionsInit.volumeName }}
+  {{- $permPostPath := default .Values.paths.containerTarget $permissionsInit.postPath }}
+  {{- $permPostMount := default .Values.paths.containerTarget $permissionsInit.postMountPath }}
+  {{- $permPostVolume := default "view-layer" $permissionsInit.postVolume }}
+  {{- $permPostName := default (printf "%s-final" $permName) $permissionsInit.postName }}
   {{- $permUser := default 1000 $permissionsInit.user }}
   {{- $permGroup := default 1000 $permissionsInit.group }}
   {{- $permMode := default "775" $permissionsInit.chmod }}
+  {{- $permImage := default "busybox" $permissionsInit.image }}
+  {{- $permImagePullPolicy := default "IfNotPresent" $permissionsInit.imagePullPolicy }}
+  {{- $permActive := and $permEnabled (or $permRunFirst $permRunLast) }}
   {{- $entrypointCopy := default (dict) .Values.entrypointCopy }}
   {{- $entryImage := default (dict) $entrypointCopy.image }}
   {{- $entryImageRepo := default .Values.app.image.repository $entryImage.repository }}
@@ -167,24 +179,10 @@ spec:
     {{- end }}
   {{- $pre := default (list) .Values.initContainers.pre }}
   {{- $post := default (list) .Values.initContainers.post }}
-  {{- if or $mergerEnabled $permEnabled (gt (len $pre) 0) (gt (len $post) 0) }}
+  {{- if or $mergerEnabled $permActive (gt (len $pre) 0) (gt (len $post) 0) }}
   initContainers:
-    {{- if $permEnabled }}
-    - name: {{ default "init-permissions" $permissionsInit.name }}
-      image: {{ default "busybox" $permissionsInit.image }}
-      imagePullPolicy: {{ default "IfNotPresent" $permissionsInit.imagePullPolicy }}
-      command:
-        - sh
-        - -c
-      args:
-        - |
-          set -e
-          TARGET="{{ $permPath }}"
-          chown -R {{ $permUser }}:{{ $permGroup }} "$TARGET"
-          chmod -R {{ $permMode }} "$TARGET"
-      volumeMounts:
-        - name: host-base
-          mountPath: /mnt/base
+    {{- if and $permEnabled $permRunFirst }}
+    {{- include "tf2chart.permissionsInitContainer" (dict "name" $permName "image" $permImage "pullPolicy" $permImagePullPolicy "path" $permPath "user" $permUser "group" $permGroup "mode" $permMode "volumeName" $permVolumeName "mountPath" $permMountPath) | nindent 4 }}
     {{- end }}
     {{- range $pre }}
     {{- toYaml (list .) | nindent 4 }}
@@ -257,6 +255,9 @@ spec:
     {{- end }}
     {{- range $post }}
     {{- toYaml (list .) | nindent 4 }}
+    {{- end }}
+    {{- if and $permEnabled $permRunLast }}
+    {{- include "tf2chart.permissionsInitContainer" (dict "name" $permPostName "image" $permImage "pullPolicy" $permImagePullPolicy "path" $permPostPath "user" $permUser "group" $permGroup "mode" $permMode "volumeName" $permPostVolume "mountPath" $permPostMount) | nindent 4 }}
     {{- end }}
   {{- end }}
   containers:

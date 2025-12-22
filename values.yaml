@@ -47,6 +47,27 @@ merger:
   securityContext: {}
   extraEnv: []
   extraVolumeMounts: []
+  watcher:
+    enabled: true
+    image:
+      repository: alpine
+      tag: latest
+      pullPolicy: IfNotPresent
+    installInotifyTools: true
+    events:
+      - close_write
+      - create
+      - delete
+      - moved_to
+      - moved_from
+    debounceSeconds: 2
+    watchPaths: []
+    command: []
+    args: []
+    env: []
+    resources: {}
+    securityContext: {}
+    extraVolumeMounts: []
 
 initContainers:
   pre: []
@@ -85,10 +106,15 @@ overlays:
     type: hostPath
     path: /mnt/serverfiles
     hostPathType: Directory
+    readOnly: true
 
 # Writable passthrough directories that map directly to the base host path.
 writablePaths:
   - tf/logs
+  # - path: tf/uploads
+  #   overlay: serverfiles-runtime
+  #   subPath: tf/uploads
+  #   sourceMount: /mnt/overlays/serverfiles-runtime
 
 hostNetwork: false
 dnsPolicy: ""

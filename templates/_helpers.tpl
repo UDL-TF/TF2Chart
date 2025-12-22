@@ -38,3 +38,66 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- include "tf2chart.fullname" . -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "tf2chart.mergeScript" -}}
+{{- $root := .root -}}
+{{- $values := $root.Values -}}
+{{- $writable := default (list) .writablePaths -}}
+{{- $skipInitial := default false .skipInitialRun -}}
+merge_dir() {
+	local src="$1"
+	local dest="$2"
+	if [ ! -d "$src" ]; then
+		echo "Warning: Source $src does not exist; skipping."
+		return
+	fi
+	mkdir -p "$dest"
+	(cd "$src" && find . -type d -print0) | while IFS= read -r -d '' dir; do
+		rel="${dir#./}"
+		if [ -z "$rel" ]; then
+			continue
+		fi
+		mkdir -p "$dest/$rel"
+	done
+	(cd "$src" && find . -type f -print0) | while IFS= read -r -d '' file; do
+		rel="${file#./}"
+		[ -n "$rel" ] || continue
+		mkdir -p "$(dirname "$dest/$rel")"
+		ln -sf "$src/$rel" "$dest/$rel"
+	done
+}
+
+run_merge() {
+	TARGET="{{ $values.paths.containerTarget }}/tf"
+	TARGET_BASE="{{ $values.paths.containerTarget }}"
+	BASE="/mnt/base"
+	echo "--- tf2chart merge starting ---"
+	echo "Merging base from $BASE into $TARGET_BASE"
+	merge_dir "$BASE" "$TARGET_BASE"
+	{{- if $values.overlays }}
+	echo "Merging overlays into $TARGET"
+	{{- range $values.overlays }}
+	echo "Layer: {{ .name }}"
+	merge_dir "/mnt/overlays/{{ .name }}" "$TARGET"
+	{{- end }}
+	{{- end }}
+	{{- if $writable }}
+	echo "Ensuring writable passthroughs"
+	{{- range $writable }}
+	mkdir -p "$TARGET/{{ .path }}"
+	{{- if .hostMount }}
+	if ! mkdir -p "{{ .hostMount }}/{{ .path }}" 2>/dev/null; then
+		echo "Warning: unable to prepare source {{ .hostMount }}/{{ .path }} (insufficient permissions?)"
+	fi
+	{{- else }}
+	echo "Warning: host mount for {{ .path }} is not defined; skipping source mkdir"
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	echo "--- tf2chart merge complete ---"
+}
+
+{{- if not $skipInitial }}
+run_merge
+{{- end }}
+{{- end -}}

@@ -42,6 +42,66 @@ spec:
   {{- $targetPrefix := printf "%s/" $targetRootStripped }}
   {{- $entryDestRel := default "entrypoint.sh" (ternary (trimPrefix $targetPrefix $entryDestClean) $entryDestClean (and (ne $targetRootStripped "") (hasPrefix $targetPrefix $entryDestClean))) }}
   {{- $viewLayerMount := "/view-layer" }}
+  {{- $watcherValues := default (dict) .Values.merger.watcher }}
+  {{- $watcherImage := default (dict) $watcherValues.image }}
+  {{- $watcherEnabled := and $mergerEnabled (ne (default true $watcherValues.enabled) false) }}
+  {{- $watcherImageRepo := default .Values.merger.image.repository $watcherImage.repository }}
+  {{- $watcherImageTag := default .Values.merger.image.tag $watcherImage.tag }}
+  {{- $watcherImagePullPolicy := default .Values.merger.image.pullPolicy $watcherImage.pullPolicy }}
+  {{- $watcherName := default "merger-watcher" $watcherValues.name }}
+  {{- $writableList := list }}
+  {{- range $index, $entry := .Values.writablePaths }}
+    {{- $pathVal := "" }}
+    {{- $volumeName := "host-base" }}
+    {{- $sourceMount := "" }}
+    {{- $subPath := "" }}
+    {{- if kindIs "string" $entry }}
+      {{- $pathVal = $entry }}
+      {{- $sourceMount = "/mnt/base" }}
+    {{- else if kindIs "map" $entry }}
+      {{- $pathVal = default "" $entry.path }}
+      {{- $volumeName = default "host-base" $entry.volume }}
+      {{- if $entry.overlay }}
+        {{- $volumeName = printf "layer-%s" $entry.overlay }}
+      {{- end }}
+      {{- $subPath = default "" $entry.subPath }}
+      {{- $sourceMount = default "" $entry.sourceMount }}
+      {{- if and (not $sourceMount) $entry.overlay }}
+        {{- $sourceMount = printf "/mnt/overlays/%s" $entry.overlay }}
+      {{- end }}
+    {{- end }}
+    {{- if and (not $sourceMount) (eq $volumeName "host-base") }}
+      {{- $sourceMount = "/mnt/base" }}
+    {{- else if and (not $sourceMount) (hasPrefix "layer-" $volumeName) }}
+      {{- $overlayName := trimPrefix "layer-" $volumeName }}
+      {{- $sourceMount = printf "/mnt/overlays/%s" $overlayName }}
+    {{- end }}
+    {{- $pathClean := trimPrefix "/" $pathVal }}
+    {{- if $pathClean }}
+      {{- $dict := dict "path" $pathClean "volumeName" $volumeName }}
+      {{- if $sourceMount }}
+        {{- $_ := set $dict "hostMount" $sourceMount }}
+      {{- end }}
+      {{- if $subPath }}
+        {{- $_ := set $dict "subPath" $subPath }}
+      {{- end }}
+      {{- $writableList = append $writableList $dict }}
+    {{- end }}
+  {{- end }}
+  {{- $writablePaths := $writableList }}
+  {{- $defaultWatchPaths := list "/mnt/base" }}
+  {{- range .Values.overlays }}
+    {{- $defaultWatchPaths = append $defaultWatchPaths (printf "/mnt/overlays/%s" .name) }}
+  {{- end }}
+  {{- $configuredWatch := default (list) $watcherValues.watchPaths }}
+  {{- $watchPaths := $configuredWatch }}
+  {{- if not (gt (len $watchPaths) 0) }}
+    {{- $watchPaths = $defaultWatchPaths }}
+  {{- end }}
+  {{- $watchEvents := default (list "close_write" "create" "delete" "moved_to" "moved_from") $watcherValues.events }}
+  {{- $watchEventArg := join "," $watchEvents }}
+  {{- $debounceSeconds := default 2 $watcherValues.debounceSeconds }}
+  {{- $installInotify := ne (default true $watcherValues.installInotifyTools) false }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -105,45 +165,7 @@ spec:
       args:
         - |
           set -eu
-          TARGET="{{ .Values.paths.containerTarget }}/tf"
-          TARGET_BASE="{{ .Values.paths.containerTarget }}"
-          BASE="/mnt/base"
-          echo "Preparing dynamic view at $TARGET"
-          merge_dir() {
-            local src="$1"
-            local dest="$2"
-            if [ ! -d "$src" ]; then
-              echo "Warning: Source $src does not exist or is empty."
-              return
-            fi
-            cd "$src"
-            find . -type d -print | while read -r dir; do
-              rel="${dir#./}"
-              mkdir -p "$dest/$rel"
-            done
-            find . -type f -print | while read -r file; do
-              rel="${file#./}"
-              mkdir -p "$(dirname "$dest/$rel")"
-              ln -sf "$src/$rel" "$dest/$rel"
-            done
-          }
-
-          echo "--- 1. Merging Base Layer ---"
-          merge_dir "$BASE" "$TARGET_BASE"
-
-          echo "--- 2. Merging Overlays ---"
-          {{- range .Values.overlays }}
-          echo "Processing layer: {{ .name }} ({{ .type }})"
-          merge_dir "/mnt/overlays/{{ .name }}" "$TARGET"
-          {{- end }}
-
-          echo "--- 3. Preparing Writable Passthroughs ---"
-          {{- range .Values.writablePaths }}
-          mkdir -p "$TARGET/{{ . }}"
-          mkdir -p "$BASE/{{ . }}"
-          {{- end }}
-
-          echo "--- Setup Complete ---"
+          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths) | indent 10 }}
       {{- with .Values.merger.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -241,16 +263,23 @@ spec:
           mountPath: /mnt/base
           readOnly: true
         {{- range .Values.overlays }}
+        {{- $overlayReadOnly := default true .readOnly }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
+          {{- if $overlayReadOnly }}
           readOnly: true
+          {{- end }}
         {{- end }}
         {{- end }}
         {{- if $mergerEnabled }}
-        {{- range .Values.writablePaths }}
-        - name: host-base
-          mountPath: {{ $.Values.paths.containerTarget }}/{{ . }}
-          subPath: {{ . }}
+        {{- range $writablePaths }}
+        - name: {{ .volumeName }}
+          mountPath: {{ $.Values.paths.containerTarget }}/{{ .path }}
+          {{- if .subPath }}
+          subPath: {{ .subPath }}
+          {{- else }}
+          subPath: {{ .path }}
+          {{- end }}
         {{- end }}
         {{- end }}
         {{- with .Values.app.extraVolumeMounts }}
@@ -286,6 +315,91 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- if $watcherEnabled }}
+    - name: {{ $watcherName }}
+      image: {{ printf "%s:%s" $watcherImageRepo $watcherImageTag }}
+      imagePullPolicy: {{ $watcherImagePullPolicy }}
+      {{- if $watcherValues.command }}
+      command:
+        {{- toYaml $watcherValues.command | nindent 8 }}
+      {{- else }}
+      command:
+        - /bin/sh
+        - -c
+      {{- end }}
+      {{- if $watcherValues.args }}
+      args:
+        {{- toYaml $watcherValues.args | nindent 8 }}
+      {{- else }}
+      args:
+        - |
+          set -euo pipefail
+          {{- if $installInotify }}
+          if ! command -v inotifywait >/dev/null 2>&1; then
+            if command -v apk >/dev/null 2>&1; then
+              apk add --no-cache inotify-tools >/dev/null 2>&1 || true
+            elif command -v microdnf >/dev/null 2>&1; then
+              (microdnf install -y inotify-tools >/dev/null 2>&1) || true
+            elif command -v apt-get >/dev/null 2>&1; then
+              (apt-get update >/dev/null 2>&1 && apt-get install -y inotify-tools >/dev/null 2>&1) || true
+            else
+              echo "inotifywait is not installed and automatic installation failed" >&2
+            fi
+          fi
+          {{- end }}
+          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "skipInitialRun" true) | indent 10 }}
+          run_merge
+          WATCH_PATHS="{{ join " " $watchPaths }}"
+          EVENTS="{{ $watchEventArg }}"
+          DEBOUNCE={{ $debounceSeconds }}
+          for path in $WATCH_PATHS; do
+            [ -z "$path" ] && continue
+            mkdir -p "$path"
+          done
+          if command -v inotifywait >/dev/null 2>&1; then
+            while true; do
+              inotifywait -qq -r -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1 || true
+              sleep "$DEBOUNCE"
+              run_merge
+            done
+          else
+            echo "inotifywait not available; falling back to periodic merge" >&2
+            while true; do
+              sleep "$DEBOUNCE"
+              run_merge
+            done
+          fi
+      {{- end }}
+      {{- with $watcherValues.env }}
+      env:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - name: host-base
+          mountPath: /mnt/base
+          readOnly: true
+        - name: view-layer
+          mountPath: {{ .Values.paths.containerTarget }}
+        {{- range .Values.overlays }}
+        {{- $overlayReadOnly := default true .readOnly }}
+        - name: layer-{{ .name }}
+          mountPath: /mnt/overlays/{{ .name }}
+          {{- if $overlayReadOnly }}
+          readOnly: true
+          {{- end }}
+        {{- end }}
+        {{- with $watcherValues.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $watcherValues.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $watcherValues.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
   {{- with .Values.priorityClassName }}
   priorityClassName: {{ . }}
   {{- end }}

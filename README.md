@@ -21,7 +21,8 @@ The chart deploys a `tf2-merger` pod that first normalizes file ownership, then 
 graph TB
   subgraph Host_Node
     hostFS[/Host base path\n/tf/standalone/]
-    overlay1[/Overlay mount\n/mnt/serverfiles/]
+    overlayBase[/Git-sync layer\n/mnt/serverfiles/serverfiles/base/]
+    overlayRuntime[/Runtime overlay\n/mnt/serverfiles/runtime-overlays/advanced-one/]
   end
 
   subgraph Kubernetes_Cluster
@@ -31,18 +32,22 @@ graph TB
     subgraph Pod_Containers
       initPerm[Init: permissions]
       stitcher[Init: stitcher]
+      watcher[Sidecar: merger-watcher]
       app[Container: tf2-merger]
     end
     svc[Service]
   end
 
   helm --> controller --> pod
-  pod --> initPerm --> stitcher --> app
+  pod --> initPerm --> stitcher --> app --> svc
   hostFS --> initPerm
   hostFS --> stitcher
-  overlay1 --> stitcher
-  stitcher --> app
-  app --> svc
+  overlayBase --> stitcher
+  overlayRuntime --> stitcher
+  overlayRuntime --> app
+  overlayBase -. fs events .-> watcher
+  watcher --> stitcher
+  watcher --> app
 ```
 
 ## How It Works
@@ -59,6 +64,8 @@ sequenceDiagram
   participant InitP as Init: permissions
   participant Stitch as Init: stitcher
   participant App as TF2 container
+  participant Watcher as Sidecar: merger-watcher
+  participant GitSync as git-sync source
 
   Op->>Helm: `helm install tf2chart ./`
   Helm->>K8s: Submit manifests w/ values overrides
@@ -70,7 +77,12 @@ sequenceDiagram
   Stitch->>Stitch: Link base + overlay layers into /tf
   Stitch-->>Pod: Exit 0 when view layer ready
   Pod->>App: Start TF2 container with merged volume
+  Pod->>Watcher: Start watcher sidecar with merge script
+  Watcher-->>Pod: Report steady-state
   App-->>K8s: Expose UDP/TCP ports via Service
+  GitSync-->>Watcher: Emit filesystem event after repo update
+  Watcher->>Stitch: Re-run merge script against runtime overlay
+  Stitch-->>App: Refresh symlink view without restart
 ```
 
 ### Controller State Machine
@@ -82,9 +94,13 @@ stateDiagram-v2
   InitRequested --> Stitching : permissionsInit disabled
   PermissionsFix --> Stitching : chmod/chown success
   PermissionsFix --> Error : chmod/chown failure
-  Stitching --> Ready : overlay merge complete
+  Stitching --> Ready : init merge complete
   Stitching --> Error : missing layer or hostPath
+  Ready --> Watching : merger.watcher.enabled
   Ready --> Updating : Helm upgrade or rollout restart
+  Watching --> Ready : inotify merge success
+  Watching --> Error : watcher failure
+  Watching --> Watching : git-sync event
   Updating --> Ready : replica available
   Updating --> Error : rollout failure
   Error --> [*]
@@ -102,6 +118,7 @@ stateDiagram-v2
 - **Security Controls**: Pass custom `securityContext`, node selectors, tolerations, and affinity for hard multi-tenancy boundaries.
 - **Resource Tuning**: Provide per-container `resources` blocks for both merger and application containers to avoid noisy neighbors.
 - **Extensible Volume Model**: Combine hostPath, PVC, ConfigMap, or Secret overlays plus arbitrary `extraVolumes` for advanced layouts.
+- **Continuous Stitch Watcher**: An optional sidecar streams `inotify` events from git-sync overlays and re-runs the stitcher whenever new commits land, ensuring symlinks and runtime overlays stay fresh without restarting the pod.
 
 ## Prerequisites
 
@@ -134,6 +151,50 @@ stateDiagram-v2
 | `SRCDS_MAXPLAYERS`  | Maximum player slots advertised to the TF2 master servers                     | `24`                 | No       |
 | `SRCDS_REGION`      | Region code reported to matchmaking services                                  | `255`                | No       |
 | `TF2_CUSTOM_CONFIG` | Path to a custom configuration file mounted inside the view layer             | `/tf/cfg/server.cfg` | No       |
+
+### Writable Paths & Runtime Overlays
+
+`writablePaths` now accepts either the legacy string form (`tf/logs`) or an object that maps the writable directory to a specific overlay volume. This makes it easy to layer a git-managed base on top of an additive runtime path that survives `git-sync` resets.
+
+```yaml
+overlays:
+  - name: serverfiles-base
+    type: hostPath
+    path: /mnt/serverfiles/serverfiles/base
+    hostPathType: Directory
+    readOnly: true
+  - name: serverfiles-runtime
+    type: hostPath
+    path: /mnt/serverfiles/runtime-overlays/advanced-one
+    hostPathType: DirectoryOrCreate
+    readOnly: false
+
+writablePaths:
+  - path: tf/logs
+    overlay: serverfiles-runtime
+  - path: tf/uploads
+    overlay: serverfiles-runtime
+```
+
+When an `overlay` is supplied, TF2Chart automatically mounts `layer-<overlay>` and points the writable subPath to that volume, keeping user uploads away from the git checkout. You can also provide `subPath` or `sourceMount` for advanced PVC layouts.
+
+### Merger Watcher Sidecar
+
+The new `merger.watcher` block enables a lightweight sidecar that watches `/mnt/base` (git-sync output) plus any declared overlays. It replays the stitcher logic whenever files change, so the rendered `/tf` view always reflects the latest commit without forcing pod restarts.
+
+```yaml
+merger:
+  watcher:
+    enabled: true
+    image:
+      repository: alpine
+      tag: latest
+    installInotifyTools: true
+    events: [close_write, create, delete, moved_to, moved_from]
+    debounceSeconds: 2
+```
+
+The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and falls back to a timed re-merge loop if the binary is unavailable. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
 
 ## Development
 

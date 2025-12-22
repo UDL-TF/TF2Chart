@@ -90,7 +90,8 @@ spec:
       args:
         - |
           set -eu
-          TARGET="{{ .Values.paths.containerTarget }}"
+          TARGET="{{ .Values.paths.containerTarget }}/tf"
+          TARGET_BASE="{{ .Values.paths.containerTarget }}"
           BASE="/mnt/base"
           echo "Preparing dynamic view at $TARGET"
           merge_dir() {
@@ -113,7 +114,7 @@ spec:
           }
 
           echo "--- 1. Merging Base Layer ---"
-          merge_dir "$BASE" "$TARGET"
+          merge_dir "$BASE" "$TARGET_BASE"
 
           echo "--- 2. Merging Overlays ---"
           {{- range .Values.overlays }}

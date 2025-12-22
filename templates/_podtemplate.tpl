@@ -35,7 +35,13 @@ spec:
   {{- $entryEnabled := and $mergerEnabled (ne (default true $entrypointCopy.enabled) false) }}
   {{- $entrySource := default "/tf/entrypoint.sh" $entrypointCopy.sourcePath }}
   {{- $entryDest := default (printf "%s/entrypoint.sh" .Values.paths.containerTarget) $entrypointCopy.destinationPath }}
-  {{- $entryChmod := $entrypointCopy.chmod }}
+  {{- $entryChmod := default "755" $entrypointCopy.chmod }}
+  {{- $entryDestClean := trimPrefix "/" $entryDest }}
+  {{- $targetRootBase := trimSuffix "/" .Values.paths.containerTarget }}
+  {{- $targetRootStripped := trimPrefix "/" $targetRootBase }}
+  {{- $targetPrefix := printf "%s/" $targetRootStripped }}
+  {{- $entryDestRel := default "entrypoint.sh" (ternary (trimPrefix $targetPrefix $entryDestClean) $entryDestClean (and (ne $targetRootStripped "") (hasPrefix $targetPrefix $entryDestClean))) }}
+  {{- $viewLayerMount := "/view-layer" }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -170,35 +176,16 @@ spec:
       command: ["/bin/sh", "-c"]
       args:
         - |
-          set -euo pipefail
+          set -eu
           SRC="{{ $entrySource }}"
-          DEST_INPUT="{{ $entryDest }}"
-          TARGET_ROOT="{{ .Values.paths.containerTarget }}"
-          MOUNT_ROOT="/mnt/view-layer"
-          if [ -z "$DEST_INPUT" ]; then
-            echo "destinationPath is empty" >&2
-            exit 1
-          fi
-          if [ "${DEST_INPUT#"$TARGET_ROOT"}" != "$DEST_INPUT" ]; then
-            DEST_REL="${DEST_INPUT#"$TARGET_ROOT"}"
-          else
-            DEST_REL="$DEST_INPUT"
-          fi
-          DEST_REL="${DEST_REL#/}"
-          if [ -z "$DEST_REL" ]; then
-            echo "Unable to derive destination relative path from $DEST_INPUT" >&2
-            exit 1
-          fi
-          DEST="$MOUNT_ROOT/$DEST_REL"
-          mkdir -p "$(dirname "$DEST")"
+          DEST="{{ $viewLayerMount }}/{{ $entryDestRel }}"
           if [ ! -f "$SRC" ]; then
             echo "Source $SRC not found in init container image" >&2
             exit 1
           fi
+          mkdir -p "$(dirname "$DEST")"
           cp "$SRC" "$DEST"
-          {{- if $entryChmod }}
           chmod {{ $entryChmod }} "$DEST"
-          {{- end }}
       {{- with $entrypointCopy.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -209,7 +196,7 @@ spec:
       {{- end }}
       volumeMounts:
         - name: view-layer
-          mountPath: /mnt/view-layer
+          mountPath: {{ $viewLayerMount }}
     {{- end }}
     {{- range $post }}
     {{- toYaml (list .) | nindent 4 }}

@@ -27,6 +27,15 @@ spec:
   {{- $permUser := default 1000 $permissionsInit.user }}
   {{- $permGroup := default 1000 $permissionsInit.group }}
   {{- $permMode := default "775" $permissionsInit.chmod }}
+  {{- $entrypointCopy := default (dict) .Values.entrypointCopy }}
+  {{- $entryImage := default (dict) $entrypointCopy.image }}
+  {{- $entryImageRepo := default .Values.app.image.repository $entryImage.repository }}
+  {{- $entryImageTag := default .Values.app.image.tag $entryImage.tag }}
+  {{- $entryImagePullPolicy := default (default "IfNotPresent" .Values.app.image.pullPolicy) $entryImage.pullPolicy }}
+  {{- $entryEnabled := and $mergerEnabled (ne (default true $entrypointCopy.enabled) false) }}
+  {{- $entrySource := default "/tf/entrypoint.sh" $entrypointCopy.sourcePath }}
+  {{- $entryDest := default (printf "%s/entrypoint.sh" .Values.paths.containerTarget) $entrypointCopy.destinationPath }}
+  {{- $entryChmod := $entrypointCopy.chmod }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -153,6 +162,54 @@ spec:
         {{- with .Values.merger.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+    {{- end }}
+    {{- if $entryEnabled }}
+    - name: {{ default "init-entrypoint" $entrypointCopy.name }}
+      image: {{ printf "%s:%s" $entryImageRepo $entryImageTag }}
+      imagePullPolicy: {{ $entryImagePullPolicy }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -euo pipefail
+          SRC="{{ $entrySource }}"
+          DEST_INPUT="{{ $entryDest }}"
+          TARGET_ROOT="{{ .Values.paths.containerTarget }}"
+          MOUNT_ROOT="/mnt/view-layer"
+          if [ -z "$DEST_INPUT" ]; then
+            echo "destinationPath is empty" >&2
+            exit 1
+          fi
+          if [ "${DEST_INPUT#"$TARGET_ROOT"}" != "$DEST_INPUT" ]; then
+            DEST_REL="${DEST_INPUT#"$TARGET_ROOT"}"
+          else
+            DEST_REL="$DEST_INPUT"
+          fi
+          DEST_REL="${DEST_REL#/}"
+          if [ -z "$DEST_REL" ]; then
+            echo "Unable to derive destination relative path from $DEST_INPUT" >&2
+            exit 1
+          fi
+          DEST="$MOUNT_ROOT/$DEST_REL"
+          mkdir -p "$(dirname "$DEST")"
+          if [ ! -f "$SRC" ]; then
+            echo "Source $SRC not found in init container image" >&2
+            exit 1
+          fi
+          cp "$SRC" "$DEST"
+          {{- if $entryChmod }}
+          chmod {{ $entryChmod }} "$DEST"
+          {{- end }}
+      {{- with $entrypointCopy.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $entrypointCopy.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - name: view-layer
+          mountPath: /mnt/view-layer
     {{- end }}
     {{- range $post }}
     {{- toYaml (list .) | nindent 4 }}

@@ -61,6 +61,19 @@ permissionsInit:
   chmod: "775"
   path: ""
 
+entrypointCopy:
+  enabled: true
+  name: init-entrypoint
+  sourcePath: /tf/entrypoint.sh
+  destinationPath: /tf/entrypoint.sh
+  chmod: "755"
+  image:
+    repository: ghcr.io/udl-tf/tf2-image
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources: {}
+  securityContext: {}
+
 paths:
   hostSource: /tf/standalone
   hostPathType: Directory

@@ -145,17 +145,18 @@ spec:
     - name: view-layer
       emptyDir: {}
     {{- range .Values.overlays }}
+    {{- $overlayType := default "hostPath" .type }}
     - name: layer-{{ .name }}
-      {{- if eq .type "configMap" }}
+      {{- if eq $overlayType "configMap" }}
       configMap:
         name: {{ required (printf "overlay %s requires sourceName" .name) .sourceName }}
-      {{- else if eq .type "secret" }}
+      {{- else if eq $overlayType "secret" }}
       secret:
         secretName: {{ required (printf "overlay %s requires sourceName" .name) .sourceName }}
-      {{- else if eq .type "pvc" }}
+      {{- else if eq $overlayType "pvc" }}
       persistentVolumeClaim:
         claimName: {{ required (printf "overlay %s requires sourceName" .name) .sourceName }}
-      {{- else if eq .type "hostPath" }}
+      {{- else if eq $overlayType "hostPath" }}
       hostPath:
         path: {{ required (printf "overlay %s requires path" .name) .path }}
         type: {{ .hostPathType | default "Directory" }}

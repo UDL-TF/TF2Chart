@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "tf2chart.fullname" . }}
+  name: {{ include "tf2chart.workloadName" . }}
   labels:
     {{- include "tf2chart.labels" . | nindent 4 }}
 spec:

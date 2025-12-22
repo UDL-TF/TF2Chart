@@ -27,3 +27,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- include "tf2chart.fullname" . -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "tf2chart.workloadName" -}}
+{{- $workloadKind := lower (default "deployment" .Values.workload.kind) -}}
+{{- if and (eq $workloadKind "deployment") .Values.workload.nameOverride -}}
+{{- .Values.workload.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else if and (eq $workloadKind "statefulset") .Values.statefulSet.nameOverride -}}
+{{- .Values.statefulSet.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- include "tf2chart.fullname" . -}}
+{{- end -}}
+{{- end -}}

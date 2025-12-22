@@ -2,10 +2,12 @@ replicaCount: 1
 
 workload:
   kind: Deployment # Deployment or StatefulSet
+  nameOverride: ""
   deploymentStrategy:
     type: Recreate
 
 statefulSet:
+  nameOverride: ""
   serviceName: ""
   podManagementPolicy: OrderedReady
   updateStrategy: {}

@@ -91,9 +91,12 @@ spec:
   {{- $writablePaths := $writableList }}
   {{- $watchSet := dict }}
   {{- $defaultWatchPaths := list }}
-  {{- $baseWatch := "/mnt/base" }}
-  {{- $defaultWatchPaths = append $defaultWatchPaths $baseWatch }}
-  {{- $_ := set $watchSet $baseWatch true }}
+  {{- $watchBase := ne (default false $watcherValues.watchBase) false }}
+  {{- if $watchBase }}
+    {{- $baseWatch := "/mnt/base" }}
+    {{- $defaultWatchPaths = append $defaultWatchPaths $baseWatch }}
+    {{- $_ := set $watchSet $baseWatch true }}
+  {{- end }}
   {{- range .Values.overlays }}
     {{- $mountPath := printf "/mnt/overlays/%s" .name }}
     {{- if not (hasKey $watchSet $mountPath) }}
@@ -384,10 +387,27 @@ spec:
           if [ "$POLL" -lt 0 ]; then
             POLL=0
           fi
-          for path in $WATCH_PATHS; do
-            [ -z "$path" ] && continue
-            mkdir -p "$path"
-          done
+          ensure_watch_paths() {
+            local missing=0
+            for path in $WATCH_PATHS; do
+              [ -z "$path" ] && continue
+              if [ -d "$path" ]; then
+                continue
+              fi
+              if [ ! -e "$path" ]; then
+                mkdir -p "$path" 2>/dev/null || true
+                if [ ! -e "$path" ]; then
+                  echo "Watch path $path is not available yet; waiting for producer" >&2
+                  missing=1
+                  continue
+                fi
+              fi
+            done
+            return $missing
+          }
+          if ! ensure_watch_paths; then
+            echo "Waiting for initial watch paths to exist..." >&2
+          fi
           if command -v inotifywait >/dev/null 2>&1; then
             HAS_INOTIFY=1
           else
@@ -395,6 +415,10 @@ spec:
             echo "inotifywait not available; falling back to polling mode" >&2
           fi
           while true; do
+            if ! ensure_watch_paths; then
+              sleep "$DEBOUNCE"
+              continue
+            fi
             if [ "$HAS_INOTIFY" -eq 1 ]; then
               if [ "$POLL" -gt 0 ]; then
                 if inotifywait -qq -r -t "$POLL" -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1; then

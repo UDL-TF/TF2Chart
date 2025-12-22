@@ -121,6 +121,7 @@ stateDiagram-v2
 - **Continuous Stitch Watcher**: An optional sidecar streams `inotify` events from git-sync overlays and re-runs the stitcher whenever new commits land, ensuring symlinks and runtime overlays stay fresh without restarting the pod.
 - **Self-Healing Links**: Each merge pass prunes dangling symlinks so deleted upstream files do not linger as broken entries inside `/tf`.
 - **Git-Sync Aware Watching**: Overlays can declare parent directories for event watching, so atomic git-sync renames are detected immediately even when the repo root is replaced wholesale.
+- **Adaptive Watch Paths**: The watcher waits for git-sync to recreate directories, can optionally monitor `/mnt/base`, and avoids kernel watch limits by default.
 
 ## Prerequisites
 
@@ -195,13 +196,22 @@ merger:
       repository: alpine
       tag: latest
     installInotifyTools: true
-    events: [close_write, create, delete, moved_to, moved_from]
+    events:
+      [
+        close_write,
+        create,
+        delete,
+        moved_to,
+        moved_from,
+        delete_self,
+        move_self,
+      ]
     debounceSeconds: 2
     pollIntervalSeconds: 300 # fallback cadence when inotify events are missing
-    # include delete_self/move_self to catch git-sync atomic swaps
+    watchBase: false # enable if you need to watch /mnt/base changes too
 ```
 
-The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and now keeps a background polling loop (`pollIntervalSeconds`) so merges happen even on filesystems that do not emit inotify events (for example, NFS). Pair this with `watchParentDepth` or `extraWatchPaths` on git-sync overlays to follow atomic directory swaps—TF2Chart will watch the overlay mount **and** its parents so the watcher sees the rename the instant git-sync promotes a new checkout. Each pass also removes dangling symlinks inside the view layer, preventing stale references when files are deleted upstream. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
+The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and now keeps a background polling loop (`pollIntervalSeconds`) so merges happen even on filesystems that do not emit inotify events (for example, NFS). Pair this with `watchParentDepth` or `extraWatchPaths` on git-sync overlays to follow atomic directory swaps—TF2Chart will watch the overlay mount **and** its parents so the watcher sees the rename the instant git-sync promotes a new checkout, patiently waiting until git-sync recreates the directory. Enable `watchBase` only when you need `/mnt/base` change detection; keeping it false reduces recursive watches and avoids hitting `fs.inotify.max_user_watches` on large installs. Each pass also removes dangling symlinks inside the view layer, preventing stale references when files are deleted upstream. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
 
 ## Development
 

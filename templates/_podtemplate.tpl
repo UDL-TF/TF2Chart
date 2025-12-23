@@ -37,7 +37,7 @@ spec:
   {{- $permGroup := default 1000 $permissionsInit.group }}
   {{- $permMode := default "775" $permissionsInit.chmod }}
   {{- $permImage := default "busybox" $permissionsInit.image }}
-  {{- $permImagePullPolicy := default "IfNotPresent" $permissionsInit.imagePullPolicy }}
+  {{- $permImagePullPolicy := default "Always" $permissionsInit.imagePullPolicy }}
   {{- $fixViewLayer := ne (default false $permissionsInit.applyDuringMerge) false }}
   {{- $viewPath := default .Values.paths.containerTarget $permissionsInit.postPath }}
   {{- $applyPaths := default (list) $permissionsInit.applyPaths }}
@@ -49,7 +49,7 @@ spec:
   {{- $entryImage := default (dict) $entrypointCopy.image }}
   {{- $entryImageRepo := default .Values.app.image.repository $entryImage.repository }}
   {{- $entryImageTag := default .Values.app.image.tag $entryImage.tag }}
-  {{- $entryImagePullPolicy := default (default "IfNotPresent" .Values.app.image.pullPolicy) $entryImage.pullPolicy }}
+  {{- $entryImagePullPolicy := default (default "Always" .Values.app.image.pullPolicy) $entryImage.pullPolicy }}
   {{- $entryEnabled := and $mergerEnabled (ne (default true $entrypointCopy.enabled) false) }}
   {{- $entrySource := default "/tf/entrypoint.sh" $entrypointCopy.sourcePath }}
   {{- $entryDest := default (printf "%s/entrypoint.sh" .Values.paths.containerTarget) $entrypointCopy.destinationPath }}
@@ -65,7 +65,7 @@ spec:
   {{- $watcherEnabled := and $mergerEnabled (ne (default true $watcherValues.enabled) false) }}
   {{- $watcherImageRepo := default .Values.merger.image.repository $watcherImage.repository }}
   {{- $watcherImageTag := default .Values.merger.image.tag $watcherImage.tag }}
-  {{- $watcherImagePullPolicy := default .Values.merger.image.pullPolicy $watcherImage.pullPolicy }}
+  {{- $watcherImagePullPolicy := default (default "Always" .Values.merger.image.pullPolicy) $watcherImage.pullPolicy }}
   {{- $watcherName := default "merger-watcher" $watcherValues.name }}
   {{- $writableList := list }}
   {{- range $index, $entry := .Values.writablePaths }}

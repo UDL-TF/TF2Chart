@@ -18,7 +18,7 @@ app:
   image:
     repository: ghcr.io/udl-tf/tf2-image
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   containerPort: 28015
   ports:
     - name: game-udp
@@ -42,7 +42,7 @@ merger:
   image:
     repository: ghcr.io/udl-tf/tf2chart-merger
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources: {}
   securityContext: {}
   extraEnv: []
@@ -52,7 +52,7 @@ merger:
     image:
       repository: ghcr.io/udl-tf/tf2chart-watcher
       tag: latest
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     events:
       - close_write
       - create
@@ -79,7 +79,7 @@ initContainers:
 permissionsInit:
   enabled: true
   image: ghcr.io/udl-tf/tf2chart-permissions:latest
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   name: init-permissions
   user: 1000
   group: 1000
@@ -105,7 +105,7 @@ entrypointCopy:
   image:
     repository: ghcr.io/udl-tf/tf2-image
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources: {}
   securityContext: {}
 

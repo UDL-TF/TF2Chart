@@ -47,7 +47,7 @@ func (m *Merger) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := mergeTree(m.cfg.BasePath, m.cfg.TargetBase); err != nil {
+	if err := mergeTree(m.cfg.BasePath, m.cfg.TargetBase, nil); err != nil {
 		return fmt.Errorf("merge base: %w", err)
 	}
 	for _, ov := range m.cfg.Overlays {
@@ -56,7 +56,7 @@ func (m *Merger) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		if err := mergeTree(ov.SourcePath, m.cfg.TargetContent); err != nil {
+		if err := mergeTree(ov.SourcePath, m.cfg.TargetContent, m.cfg.ExcludePaths); err != nil {
 			return fmt.Errorf("merge overlay %s: %w", ov.Name, err)
 		}
 	}
@@ -85,7 +85,7 @@ func (m *Merger) Run(ctx context.Context) error {
 	return nil
 }
 
-func mergeTree(src, dest string) error {
+func mergeTree(src, dest string, excludePaths []string) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -100,6 +100,13 @@ func mergeTree(src, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
+
+	// Build map of excluded paths for fast lookup
+	excludeMap := make(map[string]bool)
+	for _, excl := range excludePaths {
+		excludeMap[filepath.Clean(excl)] = true
+	}
+
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -111,6 +118,17 @@ func mergeTree(src, dest string) error {
 		if rel == "." {
 			return nil
 		}
+
+		// Check if this path should be excluded
+		targetRel := filepath.Join(dest, rel)
+		relToContent, err := filepath.Rel(dest, targetRel)
+		if err == nil && excludeMap[relToContent] {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		target := filepath.Join(dest, rel)
 		if d.IsDir() {
 			return os.MkdirAll(target, dirMode(d))

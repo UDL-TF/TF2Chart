@@ -195,8 +195,23 @@ spec:
     {{- $overlaySource := ternary (printf "%s/%s" $baseMount $sourcePath) $baseMount (ne $sourcePath "") }}
     {{- $overlayConfigs = append $overlayConfigs (dict "name" .name "sourcePath" $overlaySource) }}
   {{- end }}
+  {{- $excludePaths := list }}
+  {{- range .Values.copyTemplates }}
+    {{- if .onlyOnInit }}
+      {{- $targetPath := trimPrefix "/" (default "" .targetPath) }}
+      {{- $targetMode := lower (default "view" .targetMode) }}
+      {{- if eq $targetMode "writable" }}
+        {{- $excludeRel := $targetPath }}
+        {{- $prefix := printf "%s/" (trimSuffix "/" $targetRootStripped) }}
+        {{- if and (ne $targetRootStripped "") (hasPrefix $prefix $excludeRel) }}
+          {{- $excludeRel = trimPrefix $prefix $excludeRel }}
+        {{- end }}
+        {{- $excludePaths = append $excludePaths $excludeRel }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
   {{- $mergePermissions := dict "applyDuringMerge" $fixViewLayer "applyPaths" $applyPaths "user" $permUser "group" $permGroup "mode" $permMode }}
-  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions }}
+  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths }}
   {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
   {{- with .Values.podSecurityContext }}
   securityContext:

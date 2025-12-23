@@ -20,6 +20,7 @@ type MergeConfig struct {
 	WritablePaths []WritablePath  `json:"writablePaths"`
 	CopyTemplates []CopyTemplate  `json:"copyTemplates"`
 	Permissions   PermissionPhase `json:"permissions"`
+	ExcludePaths  []string        `json:"excludePaths,omitempty"` // Paths to exclude from overlay merge
 }
 
 // Overlay represents a stitched layer sourced from a mounted volume.

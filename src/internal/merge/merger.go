@@ -149,12 +149,25 @@ func copyTemplateDirs(entries []config.CopyTemplate, targetBase, targetContent s
 	for _, tpl := range entries {
 		src := filepath.Join(tpl.SourceMount, filepath.Clean(tpl.SourcePath))
 		var destRoot string
+		targetPath := filepath.Clean(tpl.TargetPath)
 		if tpl.TargetMode == "writable" {
 			destRoot = targetContent
+			// If targetContent is nested under targetBase (e.g., /tf/tf vs /tf),
+			// and targetPath starts with the nested portion, strip it to avoid duplication
+			if rel, err := filepath.Rel(targetBase, targetContent); err == nil && rel != "." {
+				// targetContent = /tf/tf, targetBase = /tf, rel = "tf"
+				// If targetPath = "tf/addons/...", strip the "tf/" prefix
+				prefix := rel + string(filepath.Separator)
+				if strings.HasPrefix(targetPath, prefix) {
+					targetPath = strings.TrimPrefix(targetPath, prefix)
+				} else if targetPath == rel {
+					targetPath = "."
+				}
+			}
 		} else {
 			destRoot = targetBase
 		}
-		dest := filepath.Join(destRoot, filepath.Clean(tpl.TargetPath))
+		dest := filepath.Join(destRoot, targetPath)
 		if err := copyDirectory(src, dest, tpl.Clean); err != nil {
 			return fmt.Errorf("copy template %s -> %s: %w", src, dest, err)
 		}

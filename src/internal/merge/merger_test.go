@@ -116,7 +116,9 @@ func TestCopyTemplateTargetModeWritable(t *testing.T) {
 	if err := m.Run(context.Background()); err != nil {
 		t.Fatalf("run merge: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(targetContent, "tf", "templates", "cfg.cfg")); err != nil {
+	// With targetMode "writable" and targetPath "tf/templates", the code strips the "tf/" prefix
+	// to avoid duplication, so the file ends up at targetContent/templates, not targetContent/tf/templates
+	if _, err := os.Stat(filepath.Join(targetContent, "templates", "cfg.cfg")); err != nil {
 		t.Fatalf("expected copied template in writable target: %v", err)
 	}
 }

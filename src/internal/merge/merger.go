@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/UDL-TF/TF2Chart/src/internal/config"
 )
@@ -293,10 +294,10 @@ func applyPermissions(paths []string, uid, gid int, mode os.FileMode) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if err := os.Chown(path, uid, gid); err != nil && !errors.Is(err, os.ErrPermission) {
+			if err := os.Chown(path, uid, gid); err != nil && !ignorePermError(err) {
 				return fmt.Errorf("chown %s: %w", path, err)
 			}
-			if err := os.Chmod(path, mode); err != nil && !errors.Is(err, os.ErrPermission) {
+			if err := os.Chmod(path, mode); err != nil && !ignorePermError(err) {
 				return fmt.Errorf("chmod %s: %w", path, err)
 			}
 			return nil
@@ -305,6 +306,13 @@ func applyPermissions(paths []string, uid, gid int, mode os.FileMode) error {
 		}
 	}
 	return nil
+}
+
+func ignorePermError(err error) bool {
+	if err == nil {
+		return true
+	}
+	return errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM) || errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.EROFS)
 }
 
 func parseFileMode(val string) (os.FileMode, error) {

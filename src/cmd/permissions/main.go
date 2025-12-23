@@ -44,10 +44,10 @@ func applyPermissions(ctx context.Context, root string, uid, gid int, mode fs.Fi
 		if walkErr != nil {
 			return walkErr
 		}
-		if err := os.Chown(path, uid, gid); err != nil && !errors.Is(err, syscall.EPERM) && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Chown(path, uid, gid); err != nil && !shouldIgnorePermissionError(err) {
 			return err
 		}
-		if err := os.Chmod(path, mode); err != nil && !errors.Is(err, syscall.EPERM) && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Chmod(path, mode); err != nil && !shouldIgnorePermissionError(err) {
 			return err
 		}
 		return nil
@@ -70,4 +70,8 @@ func contextErr(ctx context.Context) error {
 		return nil
 	}
 	return ctx.Err()
+}
+
+func shouldIgnorePermissionError(err error) bool {
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EROFS) || errors.Is(err, os.ErrPermission) || errors.Is(err, os.ErrNotExist)
 }

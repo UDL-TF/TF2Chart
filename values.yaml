@@ -103,7 +103,7 @@ entrypointCopy:
   destinationPath: /tf/entrypoint.sh
   chmod: "755"
   image:
-    repository: ghcr.io/udl-tf/tf2chart-entrypointcopy
+    repository: ghcr.io/udl-tf/tf2-image
     tag: latest
     pullPolicy: IfNotPresent
   resources: {}

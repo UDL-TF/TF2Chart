@@ -276,9 +276,19 @@ spec:
     - name: {{ default "init-entrypoint" $entrypointCopy.name }}
       image: {{ printf "%s:%s" $entryImageRepo $entryImageTag }}
       imagePullPolicy: {{ $entryImagePullPolicy }}
-      env:
-        - name: ENTRYPOINT_CONFIG
-          value: {{ dict "source" $entrySource "destination" (printf "%s/%s" $viewLayerMount $entryDestRel) "mode" $entryChmod | toJson | quote }}
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          SRC="{{ $entrySource }}"
+          DEST="{{ $viewLayerMount }}/{{ $entryDestRel }}"
+          if [ ! -f "$SRC" ]; then
+            echo "Source $SRC not found in init container image" >&2
+            exit 1
+          fi
+          mkdir -p "$(dirname "$DEST")"
+          cp "$SRC" "$DEST"
+          chmod {{ $entryChmod }} "$DEST"
       {{- with $entrypointCopy.resources }}
       resources:
         {{- toYaml . | nindent 8 }}

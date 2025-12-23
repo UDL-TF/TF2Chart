@@ -109,7 +109,7 @@ stateDiagram-v2
 ## Features
 
 - **Flexible Workload Kind**: Toggle between Deployment and StatefulSet via `workload.kind` to match stateless or sticky TF2 workloads.
-- **Compiled Utilities**: Purpose-built Go binaries handle permissions, stitching, entrypoint preparation, and the runtime watcher for reproducible behavior across images and distros.
+- **Compiled Utilities**: Purpose-built Go binaries handle permissions, stitching, and the runtime watcher for reproducible behavior across images and distros, while the entrypoint init container copies from the primary TF2 image so the upstream script stays authoritative.
 - **Deterministic Overlay Merge**: Ordered `overlays` list ensures predictable layer precedence when linking assets into `/tf`.
 - **Writable Passthroughs**: `writablePaths` keep logs and configs persistent by pointing subpaths back to the host base directory.
 - **Optional Merger Bypass**: Disable `merger.enabled` to mount the host tree directly for debugging or trusted environments.

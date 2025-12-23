@@ -49,6 +49,7 @@ type CopyTemplate struct {
 	TargetPath  string `json:"targetPath"`
 	Clean       bool   `json:"clean"`
 	TargetMode  string `json:"targetMode,omitempty"`
+	OnlyOnInit  bool   `json:"onlyOnInit,omitempty"` // Skip this copy during watcher re-merges
 }
 
 // PermissionPhase mirrors the subset of permissionsInit options that run during merges.

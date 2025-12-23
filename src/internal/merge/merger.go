@@ -18,7 +18,8 @@ import (
 
 // Merger renders the merged TF2 content tree according to MergeConfig.
 type Merger struct {
-	cfg *config.MergeConfig
+	cfg      *config.MergeConfig
+	firstRun bool
 }
 
 // New creates a Merger from the supplied configuration.
@@ -35,7 +36,7 @@ func New(cfg *config.MergeConfig) (*Merger, error) {
 	if err := config.ValidatePath(cfg.TargetContent); err != nil {
 		return nil, fmt.Errorf("invalid targetContent: %w", err)
 	}
-	return &Merger{cfg: cfg}, nil
+	return &Merger{cfg: cfg, firstRun: true}, nil
 }
 
 // Run executes a full merge pass.
@@ -62,7 +63,7 @@ func (m *Merger) Run(ctx context.Context) error {
 	if err := ensureWritablePaths(m.cfg.TargetBase, m.cfg.WritablePaths); err != nil {
 		return err
 	}
-	if err := copyTemplateDirs(m.cfg.CopyTemplates, m.cfg.TargetBase, m.cfg.TargetContent); err != nil {
+	if err := copyTemplateDirs(m.cfg.CopyTemplates, m.cfg.TargetBase, m.cfg.TargetContent, m.firstRun); err != nil {
 		return err
 	}
 	if err := copyWritableTemplates(m.cfg.TargetBase, m.cfg.WritablePaths); err != nil {
@@ -80,6 +81,7 @@ func (m *Merger) Run(ctx context.Context) error {
 			return err
 		}
 	}
+	m.firstRun = false
 	return nil
 }
 
@@ -145,8 +147,13 @@ func ensureWritablePaths(target string, paths []config.WritablePath) error {
 	return nil
 }
 
-func copyTemplateDirs(entries []config.CopyTemplate, targetBase, targetContent string) error {
+func copyTemplateDirs(entries []config.CopyTemplate, targetBase, targetContent string, isFirstRun bool) error {
 	for _, tpl := range entries {
+		// Skip if onlyOnInit is true and this is not the first run
+		if tpl.OnlyOnInit && !isFirstRun {
+			log.Printf("copyTemplateDirs: skipping %s (onlyOnInit, not first run)", tpl.TargetPath)
+			continue
+		}
 		src := filepath.Join(tpl.SourceMount, filepath.Clean(tpl.SourcePath))
 		var destRoot string
 		targetPath := filepath.Clean(tpl.TargetPath)

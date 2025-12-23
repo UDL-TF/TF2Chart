@@ -134,8 +134,9 @@ spec:
     {{- end }}
     {{- $cleanTarget := ne (default true $entry.cleanTarget) false }}
     {{- $targetMode := lower (default "view" $entry.targetMode) }}
+    {{- $onlyOnInit := ne (default false $entry.onlyOnInit) false }}
     {{- if and $targetPath $sourcePath $sourceMount }}
-      {{- $dict := dict "targetPath" $targetPath "sourcePath" $sourcePath "sourceMount" $sourceMount "clean" $cleanTarget "targetMode" $targetMode }}
+      {{- $dict := dict "targetPath" $targetPath "sourcePath" $sourcePath "sourceMount" $sourceMount "clean" $cleanTarget "targetMode" $targetMode "onlyOnInit" $onlyOnInit }}
       {{- $templateCopyList = append $templateCopyList $dict }}
     {{- end }}
   {{- end }}

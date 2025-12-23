@@ -159,13 +159,16 @@ writablePaths:
 # Copy-only templates refresh a writable directory from an overlay snapshot on
 # every merge run. This is helpful for configs that should start from a clean
 # template and accept runtime edits without touching the original overlay.
+# Set onlyOnInit: true to copy only during initial merge and skip watcher re-merges,
+# allowing the TF2 server to modify files without them being overwritten.
 copyTemplates: []
-  # - targetPath: tf/tf/addons/sourcemod/configs/sourcebans
-  #   overlay: serverfiles-runtime
-  #   sourcePath: tf/tf/addons/sourcemod/configs/sourcebans
+  # - targetPath: tf/addons/sourcemod/configs/sourcebans
+  #   overlay: serverfiles-base
+  #   sourcePath: serverfiles/base/addons/sourcemod/configs/sourcebans
   #   cleanTarget: true
   #   targetMode: writable
-  #   sourceMount: /mnt/overlays/serverfiles-runtime
+  #   onlyOnInit: true  # Skip copying during watcher re-merges
+  #   sourceMount: /mnt/overlays/serverfiles-base
 
 hostNetwork: false
 dnsPolicy: ""

@@ -71,6 +71,8 @@ merger:
     debounceSeconds: 2
     pollIntervalSeconds: 300
     watchPaths: []
+    watchParentDepth: 1  # Watch parent directories for git-sync atomic swaps
+    extraWatchPaths: []  # Additional paths to monitor beyond auto-detected overlays
     command: []
     args: []
     env: []
@@ -137,8 +139,6 @@ overlays:
     # sourcePath: serverfiles/base
     hostPathType: Directory
     readOnly: true
-    watchParentDepth: 1
-    extraWatchPaths: []
 
 # Writable passthrough directories that map directly to the base host path.
 writablePaths:

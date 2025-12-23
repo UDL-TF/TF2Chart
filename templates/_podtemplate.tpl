@@ -149,16 +149,16 @@ spec:
     {{- $defaultWatchPaths = append $defaultWatchPaths $baseWatch }}
     {{- $_ := set $watchSet $baseWatch true }}
   {{- end }}
+  {{- $globalWatchParentDepth := int (default 0 $watcherValues.watchParentDepth) }}
   {{- range .Values.overlays }}
     {{- $mountPath := printf "/mnt/overlays/%s" .name }}
     {{- if not (hasKey $watchSet $mountPath) }}
       {{- $defaultWatchPaths = append $defaultWatchPaths $mountPath }}
       {{- $_ := set $watchSet $mountPath true }}
     {{- end }}
-    {{- $depth := int (default 0 .watchParentDepth) }}
-    {{- if gt $depth 0 }}
+    {{- if gt $globalWatchParentDepth 0 }}
       {{- $parentPath := trimSuffix "/" $mountPath }}
-      {{- range $i, $_depth := until $depth }}
+      {{- range $i, $_depth := until $globalWatchParentDepth }}
         {{- $parentPath = dir $parentPath }}
         {{- if and $parentPath (ne $parentPath "") }}
           {{- if not (hasKey $watchSet $parentPath) }}
@@ -168,11 +168,11 @@ spec:
         {{- end }}
       {{- end }}
     {{- end }}
-    {{- range $extra := (default (list) .extraWatchPaths) }}
+  {{- end }}
+  {{- range $extra := (default (list) $watcherValues.extraWatchPaths) }}
     {{- if and $extra (not (hasKey $watchSet $extra)) }}
       {{- $defaultWatchPaths = append $defaultWatchPaths $extra }}
       {{- $_ := set $watchSet $extra true }}
-      {{- end }}
     {{- end }}
   {{- end }}
   {{- $configuredWatch := default (list) $watcherValues.watchPaths }}

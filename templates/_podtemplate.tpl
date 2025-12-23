@@ -97,6 +97,19 @@ spec:
       {{- if $subPath }}
         {{- $_ := set $dict "subPath" $subPath }}
       {{- end }}
+      {{- if $entry.template }}
+        {{- $templateSourceMount := default "" $entry.template.sourceMount }}
+        {{- if and (not $templateSourceMount) $entry.template.overlay }}
+          {{- $templateSourceMount = printf "/mnt/overlays/%s" $entry.template.overlay }}
+        {{- end }}
+        {{- if not $templateSourceMount }}
+          {{- $templateSourceMount = "/mnt/base" }}
+        {{- end }}
+        {{- $templateSourcePath := trimPrefix "/" (default $pathClean $entry.template.sourcePath) }}
+        {{- $templateClean := ne (default true $entry.template.clean) false }}
+        {{- $templateDict := dict "sourceMount" $templateSourceMount "sourcePath" $templateSourcePath "clean" $templateClean }}
+        {{- $_ := set $dict "template" $templateDict }}
+      {{- end }}
       {{- $writableList = append $writableList $dict }}
     {{- end }}
   {{- end }}
@@ -113,8 +126,9 @@ spec:
       {{- $sourceMount = "/mnt/base" }}
     {{- end }}
     {{- $cleanTarget := ne (default true $entry.cleanTarget) false }}
+    {{- $targetMode := lower (default "view" $entry.targetMode) }}
     {{- if and $targetPath $sourcePath $sourceMount }}
-      {{- $dict := dict "targetPath" $targetPath "sourcePath" $sourcePath "sourceMount" $sourceMount "cleanTarget" $cleanTarget }}
+      {{- $dict := dict "targetPath" $targetPath "sourcePath" $sourcePath "sourceMount" $sourceMount "clean" $cleanTarget "targetMode" $targetMode }}
       {{- $templateCopyList = append $templateCopyList $dict }}
     {{- end }}
   {{- end }}
@@ -159,10 +173,23 @@ spec:
     {{- $watchPaths = $defaultWatchPaths }}
   {{- end }}
   {{- $watchEvents := default (list "close_write" "create" "delete" "moved_to" "moved_from") $watcherValues.events }}
-  {{- $watchEventArg := join "," $watchEvents }}
   {{- $debounceSeconds := default 2 $watcherValues.debounceSeconds }}
-  {{- $installInotify := ne (default true $watcherValues.installInotifyTools) false }}
   {{- $pollInterval := default 300 $watcherValues.pollIntervalSeconds }}
+  {{- $targetBasePath := trimSuffix "/" .Values.paths.containerTarget }}
+  {{- if eq $targetBasePath "" }}
+    {{- $targetBasePath = "/" }}
+  {{- end }}
+  {{- $targetContentPath := ternary (printf "%s/tf" $targetBasePath) "/tf" (ne $targetBasePath "/") }}
+  {{- $overlayConfigs := list }}
+  {{- range .Values.overlays }}
+    {{- $sourcePath := trimPrefix "/" (default "" .sourcePath) }}
+    {{- $baseMount := printf "/mnt/overlays/%s" .name }}
+    {{- $overlaySource := ternary (printf "%s/%s" $baseMount $sourcePath) $baseMount (ne $sourcePath "") }}
+    {{- $overlayConfigs = append $overlayConfigs (dict "name" .name "sourcePath" $overlaySource) }}
+  {{- end }}
+  {{- $mergePermissions := dict "applyDuringMerge" $fixViewLayer "applyPaths" $applyPaths "user" $permUser "group" $permGroup "mode" $permMode }}
+  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions }}
+  {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -209,21 +236,18 @@ spec:
     - name: stitcher
       image: {{ printf "%s:%s" .Values.merger.image.repository .Values.merger.image.tag }}
       imagePullPolicy: {{ .Values.merger.image.pullPolicy }}
-      command: ["/bin/sh", "-c"]
-      args:
-        - |
-          set -eu
-          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "templateCopies" $templateCopies) | indent 10 }}
+      env:
+        - name: MERGER_CONFIG
+          value: {{ $mergeConfig | toJson | quote }}
+        {{- with .Values.merger.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.merger.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.merger.securityContext }}
       securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.merger.extraEnv }}
-      env:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumeMounts:
@@ -246,19 +270,9 @@ spec:
     - name: {{ default "init-entrypoint" $entrypointCopy.name }}
       image: {{ printf "%s:%s" $entryImageRepo $entryImageTag }}
       imagePullPolicy: {{ $entryImagePullPolicy }}
-      command: ["/bin/sh", "-c"]
-      args:
-        - |
-          set -eu
-          SRC="{{ $entrySource }}"
-          DEST="{{ $viewLayerMount }}/{{ $entryDestRel }}"
-          if [ ! -f "$SRC" ]; then
-            echo "Source $SRC not found in init container image" >&2
-            exit 1
-          fi
-          mkdir -p "$(dirname "$DEST")"
-          cp "$SRC" "$DEST"
-          chmod {{ $entryChmod }} "$DEST"
+      env:
+        - name: ENTRYPOINT_CONFIG
+          value: {{ dict "source" $entrySource "destination" (printf "%s/%s" $viewLayerMount $entryDestRel) "mode" $entryChmod | toJson | quote }}
       {{- with $entrypointCopy.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -376,113 +390,22 @@ spec:
     - name: {{ $watcherName }}
       image: {{ printf "%s:%s" $watcherImageRepo $watcherImageTag }}
       imagePullPolicy: {{ $watcherImagePullPolicy }}
-      {{- if $watcherValues.command }}
+      {{- with $watcherValues.command }}
       command:
-        {{- toYaml $watcherValues.command | nindent 8 }}
-      {{- else }}
-      command:
-        - /bin/sh
-        - -c
-      {{- end }}
-      {{- if $watcherValues.args }}
-      args:
-        {{- toYaml $watcherValues.args | nindent 8 }}
-      {{- else }}
-      args:
-        - |
-          set -euo pipefail
-          {{- if $installInotify }}
-          if ! command -v inotifywait >/dev/null 2>&1; then
-            if command -v apk >/dev/null 2>&1; then
-              apk add --no-cache inotify-tools >/dev/null 2>&1 || true
-            elif command -v microdnf >/dev/null 2>&1; then
-              (microdnf install -y inotify-tools >/dev/null 2>&1) || true
-            elif command -v apt-get >/dev/null 2>&1; then
-              (apt-get update >/dev/null 2>&1 && apt-get install -y inotify-tools >/dev/null 2>&1) || true
-            else
-              echo "inotifywait is not installed and automatic installation failed" >&2
-            fi
-          fi
-          {{- end }}
-          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "templateCopies" $templateCopies "skipInitialRun" true) | indent 10 }}
-          run_merge
-          WATCH_PATHS="{{ join " " $watchPaths }}"
-          EVENTS="{{ $watchEventArg }}"
-          DEBOUNCE={{ $debounceSeconds }}
-          POLL={{ $pollInterval }}
-          if [ "$POLL" -lt 0 ]; then
-            POLL=0
-          fi
-          ensure_watch_paths() {
-            local missing=0
-            for path in $WATCH_PATHS; do
-              [ -z "$path" ] && continue
-              if [ -d "$path" ]; then
-                continue
-              fi
-              if [ ! -e "$path" ]; then
-                mkdir -p "$path" 2>/dev/null || true
-                if [ ! -e "$path" ]; then
-                  echo "Watch path $path is not available yet; waiting for producer" >&2
-                  missing=1
-                  continue
-                fi
-              fi
-            done
-            return $missing
-          }
-          if ! ensure_watch_paths; then
-            echo "Waiting for initial watch paths to exist..." >&2
-          fi
-          if command -v inotifywait >/dev/null 2>&1; then
-            HAS_INOTIFY=1
-          else
-            HAS_INOTIFY=0
-            echo "inotifywait not available; falling back to polling mode" >&2
-          fi
-          while true; do
-            if ! ensure_watch_paths; then
-              sleep "$DEBOUNCE"
-              continue
-            fi
-            if [ "$HAS_INOTIFY" -eq 1 ]; then
-              if [ "$POLL" -gt 0 ]; then
-                if inotifywait -qq -r -t "$POLL" -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1; then
-                  sleep "$DEBOUNCE"
-                  run_merge
-                  continue
-                fi
-                STATUS=$?
-                if [ "$STATUS" -eq 2 ]; then
-                  echo "inotify timeout after $POLL seconds; running periodic merge"
-                  run_merge
-                  continue
-                fi
-                echo "inotifywait failed with status $STATUS; switching to polling mode" >&2
-                HAS_INOTIFY=0
-              else
-                if inotifywait -qq -r -e "$EVENTS" $WATCH_PATHS >/dev/null 2>&1; then
-                  sleep "$DEBOUNCE"
-                  run_merge
-                  continue
-                fi
-                STATUS=$?
-                echo "inotifywait failed with status $STATUS; switching to polling mode" >&2
-                HAS_INOTIFY=0
-              fi
-            fi
-            if [ "$POLL" -gt 0 ]; then
-              sleep "$POLL"
-            else
-              sleep "$DEBOUNCE"
-            fi
-            run_merge
-          done
-      {{- end }}
-      {{- with $watcherValues.env }}
-      env:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with $watcherValues.args }}
+      args:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      env:
+        - name: MERGER_CONFIG
+          value: {{ $mergeConfig | toJson | quote }}
+        - name: WATCHER_CONFIG
+          value: {{ $watcherConfig | toJson | quote }}
+        {{- with $watcherValues.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       volumeMounts:
         - name: host-base
           mountPath: /mnt/base

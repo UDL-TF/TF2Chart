@@ -109,6 +109,7 @@ stateDiagram-v2
 ## Features
 
 - **Flexible Workload Kind**: Toggle between Deployment and StatefulSet via `workload.kind` to match stateless or sticky TF2 workloads.
+- **Compiled Utilities**: Purpose-built Go binaries handle permissions, stitching, entrypoint preparation, and the runtime watcher for reproducible behavior across images and distros.
 - **Deterministic Overlay Merge**: Ordered `overlays` list ensures predictable layer precedence when linking assets into `/tf`.
 - **Writable Passthroughs**: `writablePaths` keep logs and configs persistent by pointing subpaths back to the host base directory.
 - **Optional Merger Bypass**: Disable `merger.enabled` to mount the host tree directly for debugging or trusted environments.
@@ -205,6 +206,20 @@ writablePaths:
     overlay: serverfiles-runtime
 ```
 
+When a writable directory needs to start from a tracked template instead of raw symlinks, attach a `template` stanza. The merger copies those files into the writable mount (no symlinks) before the pod starts, so runtime edits stay isolated from the read-only source:
+
+```yaml
+writablePaths:
+  - path: tf/tf/cfg
+    overlay: serverfiles-runtime
+    template:
+      overlay: serverfiles-base
+      sourcePath: tf/tf/cfg
+      clean: true
+```
+
+If `sourceMount` is omitted the chart automatically points at `/mnt/base` or the referenced overlay. `sourcePath` defaults to the writable `path`, and `clean` controls whether the destination is wiped between merges.
+
 When an `overlay` is supplied, TF2Chart automatically mounts `layer-<overlay>` and points the writable subPath to that volume, keeping user uploads away from the git checkout. You can also provide `subPath` or `sourceMount` for advanced PVC layouts.
 
 ### Copy-on-start Templates
@@ -217,6 +232,7 @@ copyTemplates:
     overlay: serverfiles-base
     sourcePath: serverfiles/base/tf/addons/sourcemod/configs/sourcebans
     cleanTarget: true # optional, defaults to true
+    targetMode: view # set to "writable" to copy into the merged tf/tf tree before writable mounts are overlaid
 ```
 
 - `targetPath` is relative to `paths.containerTarget` (for example, `/tf/tf/...`).
@@ -251,9 +267,8 @@ merger:
   watcher:
     enabled: true
     image:
-      repository: alpine
+      repository: ghcr.io/udl-tf/tf2chart-watcher
       tag: latest
-    installInotifyTools: true
     events:
       [
         close_write,
@@ -269,7 +284,10 @@ merger:
     watchBase: false # enable if you need to watch /mnt/base changes too
 ```
 
-The watcher attempts to install `inotify-tools` automatically on Alpine/Debian/RHEL images and now keeps a background polling loop (`pollIntervalSeconds`) so merges happen even on filesystems that do not emit inotify events (for example, NFS). Pair this with `watchParentDepth` or `extraWatchPaths` on git-sync overlays to follow atomic directory swaps—TF2Chart will watch the overlay mount **and** its parents so the watcher sees the rename the instant git-sync promotes a new checkout, patiently waiting until git-sync recreates the directory. Enable `watchBase` only when you need `/mnt/base` change detection; keeping it false reduces recursive watches and avoids hitting `fs.inotify.max_user_watches` on large installs. Each pass also removes dangling symlinks inside the view layer, preventing stale references when files are deleted upstream. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
+The watcher streams filesystem events from `fsnotify` and supplements them with a background polling loop (`pollIntervalSeconds`) so merges happen even on filesystems that do not emit inotify events (for example, NFS). Pair this with `watchParentDepth` or `extraWatchPaths` on git-sync overlays to follow atomic directory swaps—TF2Chart will watch the overlay mount **and** its parents so the watcher sees the rename the instant git-sync promotes a new checkout, patiently waiting until git-sync recreates the directory. Enable `watchBase` only when you need `/mnt/base` change detection; keeping it false reduces recursive watches and avoids hitting `fs.inotify.max_user_watches` on large installs. Each pass also removes dangling symlinks inside the view layer, preventing stale references when files are deleted upstream. You can override `command`/`args` or supply custom `watchPaths` when monitoring additional directories.
+
+> **Note**
+> The legacy shell watcher has been replaced with the compiled `watcher` binary located under `src/cmd/watcher`. It consumes the same Helm values through JSON env vars, so there is no longer a need to bake `bash`, `apk`, or `inotify-tools` into the image unless you override the command/args manually.
 
 ## Development
 
@@ -286,6 +304,16 @@ TF2Chart/
     ├── service.yaml           # Service definition with dynamic port wiring
     └── statefulset.yaml       # StatefulSet manifest when workloads need stable IDs
 ```
+
+### Go Helper Images
+
+The `src/` directory contains a standalone Go module that powers the stitched init containers and watcher. Each binary lives under `cmd/<name>` with matching Dockerfiles for multi-arch builds. Run the unit tests locally with `go test ./...`, then produce images such as the merger with:
+
+```bash
+docker build -f src/cmd/merger/Dockerfile -t ghcr.io/udl-tf/tf2chart-merger:latest src
+```
+
+The Helm values default to the `ghcr.io/udl-tf/tf2chart-*` repositories but you can point them at any registry by overriding the `image.repository`/`tag` pairs.
 
 ## License
 

@@ -40,7 +40,7 @@ app:
 merger:
   enabled: true
   image:
-    repository: alpine
+    repository: ghcr.io/udl-tf/tf2chart-merger
     tag: latest
     pullPolicy: IfNotPresent
   resources: {}
@@ -50,10 +50,9 @@ merger:
   watcher:
     enabled: true
     image:
-      repository: alpine
+      repository: ghcr.io/udl-tf/tf2chart-watcher
       tag: latest
       pullPolicy: IfNotPresent
-    installInotifyTools: true
     events:
       - close_write
       - create
@@ -79,7 +78,7 @@ initContainers:
 
 permissionsInit:
   enabled: true
-  image: busybox
+  image: ghcr.io/udl-tf/tf2chart-permissions:latest
   imagePullPolicy: IfNotPresent
   name: init-permissions
   user: 1000
@@ -104,7 +103,7 @@ entrypointCopy:
   destinationPath: /tf/entrypoint.sh
   chmod: "755"
   image:
-    repository: ghcr.io/udl-tf/tf2-image
+    repository: ghcr.io/udl-tf/tf2chart-entrypointcopy
     tag: latest
     pullPolicy: IfNotPresent
   resources: {}
@@ -130,6 +129,11 @@ overlays:
 # Writable passthrough directories that map directly to the base host path.
 writablePaths:
   - tf/logs
+  # - path: tf/tf/cfg
+  #   template:
+  #     overlay: serverfiles-base
+  #     sourcePath: tf/tf/cfg
+  #     clean: true
   # - path: tf/tf/addons/sourcemod/configs/sourcebans
   #   overlay: serverfiles-runtime
   #   subPath: tf/tf/addons/sourcemod/configs/sourcebans
@@ -146,6 +150,7 @@ copyTemplates: []
   #   overlay: serverfiles-runtime
   #   sourcePath: tf/tf/addons/sourcemod/configs/sourcebans
   #   cleanTarget: true
+  #   targetMode: writable
   #   sourceMount: /mnt/overlays/serverfiles-runtime
 
 hostNetwork: false

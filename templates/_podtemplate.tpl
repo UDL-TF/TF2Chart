@@ -101,6 +101,24 @@ spec:
     {{- end }}
   {{- end }}
   {{- $writablePaths := $writableList }}
+  {{- $templateCopyList := list }}
+  {{- range $index, $entry := .Values.copyTemplates }}
+    {{- $targetPath := trimPrefix "/" (default "" $entry.targetPath) }}
+    {{- $sourcePath := trimPrefix "/" (default "" $entry.sourcePath) }}
+    {{- $sourceMount := default "" $entry.sourceMount }}
+    {{- if and (not $sourceMount) $entry.overlay }}
+      {{- $sourceMount = printf "/mnt/overlays/%s" $entry.overlay }}
+    {{- end }}
+    {{- if not $sourceMount }}
+      {{- $sourceMount = "/mnt/base" }}
+    {{- end }}
+    {{- $cleanTarget := ne (default true $entry.cleanTarget) false }}
+    {{- if and $targetPath $sourcePath $sourceMount }}
+      {{- $dict := dict "targetPath" $targetPath "sourcePath" $sourcePath "sourceMount" $sourceMount "cleanTarget" $cleanTarget }}
+      {{- $templateCopyList = append $templateCopyList $dict }}
+    {{- end }}
+  {{- end }}
+  {{- $templateCopies := $templateCopyList }}
   {{- $watchSet := dict }}
   {{- $defaultWatchPaths := list }}
   {{- $watchBase := ne (default false $watcherValues.watchBase) false }}
@@ -195,7 +213,7 @@ spec:
       args:
         - |
           set -eu
-          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths) | indent 10 }}
+          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "templateCopies" $templateCopies) | indent 10 }}
       {{- with .Values.merger.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -386,7 +404,7 @@ spec:
             fi
           fi
           {{- end }}
-          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "skipInitialRun" true) | indent 10 }}
+          {{ include "tf2chart.mergeScript" (dict "root" . "writablePaths" $writablePaths "templateCopies" $templateCopies "skipInitialRun" true) | indent 10 }}
           run_merge
           WATCH_PATHS="{{ join " " $watchPaths }}"
           EVENTS="{{ $watchEventArg }}"

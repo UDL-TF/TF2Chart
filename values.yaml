@@ -130,9 +130,22 @@ overlays:
 # Writable passthrough directories that map directly to the base host path.
 writablePaths:
   - tf/logs
+  # - path: tf/tf/addons/sourcemod/configs/sourcebans
+  #   overlay: serverfiles-runtime
+  #   subPath: tf/tf/addons/sourcemod/configs/sourcebans
   # - path: tf/uploads
   #   overlay: serverfiles-runtime
   #   subPath: tf/uploads
+  #   sourceMount: /mnt/overlays/serverfiles-runtime
+
+# Copy-only templates refresh a writable directory from an overlay snapshot on
+# every merge run. This is helpful for configs that should start from a clean
+# template and accept runtime edits without touching the original overlay.
+copyTemplates: []
+  # - targetPath: tf/tf/addons/sourcemod/configs/sourcebans
+  #   overlay: serverfiles-runtime
+  #   sourcePath: tf/tf/addons/sourcemod/configs/sourcebans
+  #   cleanTarget: true
   #   sourceMount: /mnt/overlays/serverfiles-runtime
 
 hostNetwork: false

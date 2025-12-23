@@ -62,6 +62,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $root := .root -}}
 {{- $values := $root.Values -}}
 {{- $writable := default (list) .writablePaths -}}
+{{- $copyTemplates := default (list) .templateCopies -}}
 {{- $skipInitial := default false .skipInitialRun -}}
 {{- $perm := default (dict) $values.permissionsInit -}}
 {{- $permUser := default 1000 $perm.user -}}
@@ -96,6 +97,24 @@ merge_dir() {
   done
 }
 
+copy_template_dir() {
+  local src="$1"
+  local dest="$2"
+  local clean="${3:-true}"
+  if [ ! -d "$src" ]; then
+    echo "Warning: Template source $src does not exist; skipping copy."
+    return
+  fi
+  if [ "$clean" = "true" ]; then
+    rm -rf "$dest"
+  fi
+  mkdir -p "$dest"
+  if [ -z "$(ls -A "$src" 2>/dev/null)" ]; then
+    return
+  fi
+  cp -a "$src/." "$dest/"
+}
+
 run_merge() {
   TARGET="{{ $values.paths.containerTarget }}/tf"
   TARGET_BASE="{{ $values.paths.containerTarget }}"
@@ -123,6 +142,12 @@ run_merge() {
   {{- else }}
   echo "Warning: host mount for {{ .path }} is not defined; skipping source mkdir"
   {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if $copyTemplates }}
+  echo "Copying template directories"
+  {{- range $copyTemplates }}
+  copy_template_dir "{{ .sourceMount }}/{{ .sourcePath }}" "$TARGET_BASE/{{ .targetPath }}" {{ if .cleanTarget }}"true"{{ else }}"false"{{ end }}
   {{- end }}
   {{- end }}
   echo "--- 4. Removing dangling symlinks ---"

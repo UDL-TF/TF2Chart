@@ -207,6 +207,25 @@ writablePaths:
 
 When an `overlay` is supplied, TF2Chart automatically mounts `layer-<overlay>` and points the writable subPath to that volume, keeping user uploads away from the git checkout. You can also provide `subPath` or `sourceMount` for advanced PVC layouts.
 
+### Copy-on-start Templates
+
+Sometimes you want a directory to start from a pristine template on every pod restart, but still become writable afterwards. Declare that intent via `copyTemplates`: TF2Chart copies the source tree into the merged view during each stitch run (init container and watcher) instead of symlinking it, so runtime edits never touch the original overlay.
+
+```yaml
+copyTemplates:
+  - targetPath: tf/tf/addons/sourcemod/configs/sourcebans
+    overlay: serverfiles-base
+    sourcePath: serverfiles/base/tf/addons/sourcemod/configs/sourcebans
+    cleanTarget: true # optional, defaults to true
+```
+
+- `targetPath` is relative to `paths.containerTarget` (for example, `/tf/tf/...`).
+- `overlay` picks `/mnt/overlays/<name>` as the copy source. Omit it to read from `/mnt/base`, or override with `sourceMount` to point at any mounted volume.
+- `sourcePath` is the subdirectory under that mount that should be cloned.
+- `cleanTarget` removes the destination before copying; set it to `false` to merge into the existing directory.
+
+This pattern is perfect for SourceBans configs (`sb_admins.cfg`, `sb_admin_groups.cfg`): keep a tracked template in a read-only overlay, mark the folder as a writablePath, and add a `copyTemplates` rule so each rollout rewrites `/tf/tf/addons/sourcemod/configs/sourcebans` from the template before the TF2 server boots.
+
 ### Permissions Enforcement
 
 `permissionsInit` now supports dual-phase execution and continuous ownership fixes so the merged `/tf` tree always stays writable by SteamCMD (UID 1000) even after overlays add new files.

@@ -103,7 +103,7 @@ spec:
       {{- if $subPath }}
         {{- $_ := set $dict "subPath" $subPath }}
       {{- end }}
-      {{- if $entry.template }}
+      {{- if and (kindIs "map" $entry) $entry.template }}
         {{- $templateSourceMount := default "" $entry.template.sourceMount }}
         {{- if and (not $templateSourceMount) $entry.template.overlay }}
           {{- $templateSourceMount = printf "/mnt/overlays/%s" $entry.template.overlay }}

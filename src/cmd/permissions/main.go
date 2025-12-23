@@ -44,10 +44,10 @@ func applyPermissions(ctx context.Context, root string, uid, gid int, mode fs.Fi
 		if walkErr != nil {
 			return walkErr
 		}
-		if err := os.Chown(path, uid, gid); err != nil && !errors.Is(err, syscall.EPERM) {
+		if err := os.Chown(path, uid, gid); err != nil && !errors.Is(err, syscall.EPERM) && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		if err := os.Chmod(path, mode); err != nil && !errors.Is(err, syscall.EPERM) {
+		if err := os.Chmod(path, mode); err != nil && !errors.Is(err, syscall.EPERM) && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		return nil

@@ -18,10 +18,12 @@ func main() {
 	env := flag.String("config-env", "PERMISSIONS_CONFIG", "env var containing permission JSON")
 	flag.Parse()
 
+	log.Printf("permissions job starting (configEnv=%s)", *env)
 	cfg, err := config.FromEnv[config.PermissionJob](*env)
 	if err != nil {
 		log.Fatalf("load permission config: %v", err)
 	}
+	log.Printf("permissions config: path=%s uid=%d gid=%d mode=%s", cfg.Path, cfg.User, cfg.Group, cfg.Mode)
 
 	mode, err := parseMode(cfg.Mode)
 	if err != nil {

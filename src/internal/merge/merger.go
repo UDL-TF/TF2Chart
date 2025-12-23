@@ -294,11 +294,15 @@ func applyPermissions(paths []string, uid, gid int, mode os.FileMode) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if err := os.Chown(path, uid, gid); err != nil && !ignorePermError(err) {
+			// Use Lchown to change symlink ownership itself, not the target
+			if err := os.Lchown(path, uid, gid); err != nil && !ignorePermError(err) {
 				return fmt.Errorf("chown %s: %w", path, err)
 			}
-			if err := os.Chmod(path, mode); err != nil && !ignorePermError(err) {
-				return fmt.Errorf("chmod %s: %w", path, err)
+			// Only chmod non-symlinks (chmod follows symlinks)
+			if d.Type()&os.ModeSymlink == 0 {
+				if err := os.Chmod(path, mode); err != nil && !ignorePermError(err) {
+					return fmt.Errorf("chmod %s: %w", path, err)
+				}
 			}
 			return nil
 		}); err != nil {

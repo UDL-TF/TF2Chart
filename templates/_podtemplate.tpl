@@ -23,7 +23,8 @@ spec:
   {{- $contentVolume := ternary "view-layer" "host-base" $mergerEnabled }}
   {{- $permissionsInit := default (dict) .Values.permissionsInit }}
   {{- $permEnabled := and (ne (default true $permissionsInit.enabled) false) true }}
-  {{- $permPath := default "/mnt/base" $permissionsInit.path }}
+  {{- $permPathRaw := default "" $permissionsInit.path }}
+  {{- $permPath := ternary $permPathRaw "/mnt/base" (ne (trimAll " " $permPathRaw) "") }}
   {{- $permName := default "init-permissions" $permissionsInit.name }}
   {{- $permRunFirst := ne (default true $permissionsInit.runFirst) false }}
   {{- $permRunLast := ne (default true $permissionsInit.runLast) false }}

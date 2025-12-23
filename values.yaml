@@ -98,7 +98,7 @@ permissionsInit:
   user: 1000
   group: 1000
   chmod: "775"
-  path: ""
+  path: "" # Path to fix in runFirst phase (defaults to /mnt/base if empty)
   volumeName: host-base
   mountPath: /mnt/base
   runFirst: true
@@ -108,7 +108,7 @@ permissionsInit:
   postMountPath: /tf
   postVolume: view-layer
   applyDuringMerge: true
-  applyPaths: []
+  applyPaths: [] # Paths to fix during merge (defaults to postPath if empty)
 
 entrypointCopy:
   enabled: true

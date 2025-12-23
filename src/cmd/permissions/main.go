@@ -44,11 +44,15 @@ func applyPermissions(ctx context.Context, root string, uid, gid int, mode fs.Fi
 		if walkErr != nil {
 			return walkErr
 		}
-		if err := os.Chown(path, uid, gid); err != nil && !shouldIgnorePermissionError(err) {
+		// Use Lchown to change symlink ownership itself, not the target
+		if err := os.Lchown(path, uid, gid); err != nil && !shouldIgnorePermissionError(err) {
 			return err
 		}
-		if err := os.Chmod(path, mode); err != nil && !shouldIgnorePermissionError(err) {
-			return err
+		// Only chmod non-symlinks (chmod follows symlinks)
+		if d.Type()&os.ModeSymlink == 0 {
+			if err := os.Chmod(path, mode); err != nil && !shouldIgnorePermissionError(err) {
+				return err
+			}
 		}
 		return nil
 	})

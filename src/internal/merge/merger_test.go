@@ -75,7 +75,7 @@ func TestWritableTemplateCopiesPhysicalFiles(t *testing.T) {
 	if err := m.Run(context.Background()); err != nil {
 		t.Fatalf("run merge: %v", err)
 	}
-	info, err := os.Lstat(filepath.Join(targetContent, "tf", "cfg", "server.cfg"))
+	info, err := os.Lstat(filepath.Join(targetBase, "tf", "cfg", "server.cfg"))
 	if err != nil {
 		t.Fatalf("stat copied file: %v", err)
 	}

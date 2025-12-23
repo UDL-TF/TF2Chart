@@ -177,6 +177,7 @@ func copyWritableTemplates(target string, paths []config.WritablePath) error {
 }
 
 func copyDirectory(src, dest string, clean bool) error {
+	log.Printf("copyDirectory: src=%s dest=%s clean=%v", src, dest, clean)
 	info, err := os.Stat(src)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -186,6 +187,7 @@ func copyDirectory(src, dest string, clean bool) error {
 		return err
 	}
 	if clean {
+		log.Printf("copyDirectory: removing dest %s", dest)
 		if err := os.RemoveAll(dest); err != nil {
 			return err
 		}
@@ -213,10 +215,16 @@ func copyDirectory(src, dest string, clean bool) error {
 			if err != nil {
 				return err
 			}
+			log.Printf("copyDirectory: copying symlink %s -> %s to %s", path, linkTarget, target)
 			if err := os.Symlink(linkTarget, target); err != nil {
 				return err
 			}
 			return nil
+		}
+		log.Printf("copyDirectory: copying file %s to %s", path, target)
+		// Remove any existing file or symlink at the target
+		if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("copyDirectory: warning - failed to remove existing target %s: %v", target, err)
 		}
 		return copyFile(path, target, fileMode(d))
 	})

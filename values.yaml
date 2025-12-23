@@ -88,6 +88,24 @@ initContainers:
   pre: []
   post: []
 
+# Decompressor init container
+# Scans base and overlay paths for .bz2 files, decompresses them, and removes the archives.
+# This runs before the stitcher to ensure map files are decompressed before merging.
+decompressor:
+  enabled: true
+  image:
+    repository: ghcr.io/udl-tf/tf2chart-decompressor
+    tag: latest
+    pullPolicy: Always
+  scanBase: true  # Scan the base path for .bz2 files
+  scanOverlays: []  # List of overlay names to scan (e.g., ["maps", "custom"])
+  resources: {}
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    runAsNonRoot: false
+  extraVolumeMounts: []
+
 # Permissions init container
 # IMPORTANT: This container MUST run as root (runAsUser: 0) to properly
 # chown files. The securityContext is automatically set in the template.

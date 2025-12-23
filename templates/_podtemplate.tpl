@@ -21,6 +21,14 @@ spec:
   {{- end }}
   {{- $mergerEnabled := ne (default true .Values.merger.enabled) false }}
   {{- $contentVolume := ternary "view-layer" "host-base" $mergerEnabled }}
+  {{- $decompressor := default (dict) .Values.decompressor }}
+  {{- $decompEnabled := and (hasKey .Values "decompressor") (ne (default false $decompressor.enabled) false) }}
+  {{- $decompImage := default (dict) $decompressor.image }}
+  {{- $decompImageRepo := default "ghcr.io/udl-tf/tf2chart-decompressor" $decompImage.repository }}
+  {{- $decompImageTag := default "latest" $decompImage.tag }}
+  {{- $decompImagePullPolicy := default "Always" $decompImage.pullPolicy }}
+  {{- $decompScanBase := ne (default true $decompressor.scanBase) false }}
+  {{- $decompScanOverlays := default (list) $decompressor.scanOverlays }}
   {{- $permissionsInit := default (dict) .Values.permissionsInit }}
   {{- $permEnabled := and (ne (default true $permissionsInit.enabled) false) true }}
   {{- $permPathRaw := default "" $permissionsInit.path }}
@@ -247,13 +255,49 @@ spec:
     {{- end }}
   {{- $pre := default (list) .Values.initContainers.pre }}
   {{- $post := default (list) .Values.initContainers.post }}
-  {{- if or $mergerEnabled $permActive (gt (len $pre) 0) (gt (len $post) 0) }}
+  {{- if or $mergerEnabled $permActive $decompEnabled (gt (len $pre) 0) (gt (len $post) 0) }}
   initContainers:
     {{- if and $permEnabled $permRunFirst }}
     {{- include "tf2chart.permissionsInitContainer" (dict "name" $permName "image" $permImage "pullPolicy" $permImagePullPolicy "path" $permPath "user" $permUser "group" $permGroup "mode" $permMode "volumeName" $permVolumeName "mountPath" $permMountPath) | nindent 4 }}
     {{- end }}
     {{- range $pre }}
     {{- toYaml (list .) | nindent 4 }}
+    {{- end }}
+    {{- if $decompEnabled }}
+    - name: decompressor
+      image: {{ printf "%s:%s" $decompImageRepo $decompImageTag }}
+      imagePullPolicy: {{ $decompImagePullPolicy }}
+      args:
+        {{- if $decompScanBase }}
+        - -base=/mnt/base
+        {{- end }}
+        {{- if gt (len $decompScanOverlays) 0 }}
+        {{- $overlayPaths := list }}
+        {{- range $decompScanOverlays }}
+        {{- $overlayPaths = append $overlayPaths (printf "/mnt/overlays/%s" .) }}
+        {{- end }}
+        - {{ printf "-overlays=%s" (join "," $overlayPaths) }}
+        {{- end }}
+      {{- with $decompressor.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $decompressor.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        {{- if $decompScanBase }}
+        - name: host-base
+          mountPath: /mnt/base
+        {{- end }}
+        {{- range $decompScanOverlays }}
+        - name: layer-{{ . }}
+          mountPath: /mnt/overlays/{{ . }}
+        {{- end }}
+        {{- with $decompressor.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     {{- end }}
     {{- if $mergerEnabled }}
     - name: stitcher

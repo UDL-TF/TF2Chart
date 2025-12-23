@@ -1,0 +1,86 @@
+# Example configuration for TF2Chart with bz2 decompression
+#
+# This example shows how to configure the decompressor init container
+# to automatically decompress .bz2 files (commonly used for TF2 map files)
+# before the stitcher merges the overlays.
+
+paths:
+  hostSource: /tf/standalone
+  containerTarget: /tf
+
+# Configure overlays with map files
+overlays:
+  # Maps overlay containing .bz2 compressed map files
+  - name: maps
+    type: hostPath
+    path: /mnt/maps
+    hostPathType: Directory
+    readOnly: true
+  
+  # Custom content overlay
+  - name: custom
+    type: hostPath
+    path: /mnt/custom
+    hostPathType: Directory
+    readOnly: true
+
+# Decompressor configuration
+decompressor:
+  enabled: true
+  image:
+    repository: ghcr.io/udl-tf/tf2chart-decompressor
+    tag: latest
+    pullPolicy: Always
+  
+  # Scan the base path for .bz2 files
+  scanBase: true
+  
+  # List of overlay names to scan for .bz2 files
+  # These should match overlay names defined above
+  scanOverlays:
+    - maps     # Scan the maps overlay
+    - custom   # Scan the custom overlay
+  
+  # Optional: Resource limits
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    requests:
+      memory: 128Mi
+      cpu: 100m
+  
+  # Security context (must run as root to modify files)
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    runAsNonRoot: false
+
+# Application configuration
+app:
+  name: tf2-server
+  image:
+    repository: ghcr.io/udl-tf/tf2-image
+    tag: latest
+    pullPolicy: Always
+  
+  env:
+    - name: SRCDS_TOKEN
+      value: "YOUR_GSLT_TOKEN_HERE"
+    - name: SRCDS_MAXPLAYERS
+      value: "24"
+
+# Note: The decompressor will:
+# 1. Scan /mnt/base for any .bz2 files
+# 2. Scan /mnt/overlays/maps for any .bz2 files
+# 3. Scan /mnt/overlays/custom for any .bz2 files
+# 4. Decompress each .bz2 file in-place
+# 5. Remove the .bz2 archive after successful decompression
+# 6. Handle split maps in folders ending with .bsp or .bsp.bz2.parts:
+#    - Folders like "bhop_arcane2_a06.bsp.bz2.parts/" containing:
+#      bhop_arcane2_a06.bsp.bz2.part.000
+#      bhop_arcane2_a06.bsp.bz2.part.001
+#      bhop_arcane2_a06.bsp.bz2.part.002
+#    - Parts are concatenated, then decompressed as a single bz2 stream
+#    - Result: Single bhop_arcane2_a06.bsp file (169 MB from 90 MB compressed)
+# 7. Run before the stitcher merges the layers

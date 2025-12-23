@@ -41,6 +41,9 @@ jobs:
           - name: tf2chart-permissions
             dockerfile: src/cmd/permissions/Dockerfile
             context: src
+          - name: tf2chart-decompressor
+            dockerfile: src/cmd/decompressor/Dockerfile
+            context: src
     steps:
       - name: Checkout
         uses: actions/checkout@v4

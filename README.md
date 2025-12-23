@@ -244,6 +244,14 @@ This pattern is perfect for SourceBans configs (`sb_admins.cfg`, `sb_admin_group
 
 ### Permissions Enforcement
 
+**Important:** The `permissionsInit` container, `merger` (stitcher), and `merger.watcher` containers **must run as root** (`runAsUser: 0`) to properly change file ownership via `chown`. These containers are configured to run as root by default in `values.yaml`, even if the pod has a restrictive `podSecurityContext`.
+
+If files are showing incorrect ownership (e.g., `65532:65532` instead of `1000:1000`), verify that:
+
+1. The init containers are not being blocked by pod security policies
+2. The `securityContext` for these containers has not been overridden to run as non-root
+3. The merger and watcher containers have `runAsUser: 0` set
+
 `permissionsInit` now supports dual-phase execution and continuous ownership fixes so the merged `/tf` tree always stays writable by SteamCMD (UID 1000) even after overlays add new files.
 
 ```yaml

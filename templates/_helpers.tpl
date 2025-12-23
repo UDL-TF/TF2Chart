@@ -44,6 +44,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: {{ $ctx.name }}
   image: {{ $ctx.image }}
   imagePullPolicy: {{ $ctx.pullPolicy }}
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    runAsNonRoot: false
   env:
     - name: PERMISSIONS_CONFIG
       value: {{ dict "path" $ctx.path "user" $ctx.user "group" $ctx.group "mode" $ctx.mode | toJson | quote }}

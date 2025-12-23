@@ -37,6 +37,10 @@ app:
   extraVolumeMounts: []
   lifecycle: {}
 
+# Merger stitcher init container and watcher sidecar
+# IMPORTANT: Both merger and watcher MUST run as root (runAsUser: 0)
+# to properly chown files to the target UID/GID (default 1000:1000).
+# Do not override securityContext to run as non-root or permissions will fail.
 merger:
   enabled: true
   image:
@@ -44,7 +48,10 @@ merger:
     tag: latest
     pullPolicy: Always
   resources: {}
-  securityContext: {}
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    runAsNonRoot: false
   extraEnv: []
   extraVolumeMounts: []
   watcher:
@@ -68,7 +75,10 @@ merger:
     args: []
     env: []
     resources: {}
-    securityContext: {}
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      runAsNonRoot: false
     extraVolumeMounts: []
     watchBase: true
 
@@ -76,6 +86,10 @@ initContainers:
   pre: []
   post: []
 
+# Permissions init container
+# IMPORTANT: This container MUST run as root (runAsUser: 0) to properly
+# chown files. The securityContext is automatically set in the template.
+# Do not disable runFirst/runLast if you have permission issues.
 permissionsInit:
   enabled: true
   image: ghcr.io/udl-tf/tf2chart-permissions:latest

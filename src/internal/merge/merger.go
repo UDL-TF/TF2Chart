@@ -59,13 +59,13 @@ func (m *Merger) Run(ctx context.Context) error {
 			return fmt.Errorf("merge overlay %s: %w", ov.Name, err)
 		}
 	}
-	if err := ensureWritablePaths(m.cfg.TargetContent, m.cfg.WritablePaths); err != nil {
+	if err := ensureWritablePaths(m.cfg.TargetBase, m.cfg.WritablePaths); err != nil {
 		return err
 	}
 	if err := copyTemplateDirs(m.cfg.CopyTemplates, m.cfg.TargetBase, m.cfg.TargetContent); err != nil {
 		return err
 	}
-	if err := copyWritableTemplates(m.cfg.TargetContent, m.cfg.WritablePaths); err != nil {
+	if err := copyWritableTemplates(m.cfg.TargetBase, m.cfg.WritablePaths); err != nil {
 		return err
 	}
 	if err := pruneDanglingSymlinks(m.cfg.TargetBase, m.cfg.TargetContent); err != nil {

@@ -38,6 +38,12 @@ spec:
   {{- $permMode := default "775" $permissionsInit.chmod }}
   {{- $permImage := default "busybox" $permissionsInit.image }}
   {{- $permImagePullPolicy := default "IfNotPresent" $permissionsInit.imagePullPolicy }}
+  {{- $fixViewLayer := ne (default false $permissionsInit.applyDuringMerge) false }}
+  {{- $viewPath := default .Values.paths.containerTarget $permissionsInit.postPath }}
+  {{- $applyPaths := default (list) $permissionsInit.applyPaths }}
+  {{- if and $fixViewLayer (eq (len $applyPaths) 0) }}
+    {{- $applyPaths = append $applyPaths $viewPath }}
+  {{- end }}
   {{- $permActive := and $permEnabled (or $permRunFirst $permRunLast) }}
   {{- $entrypointCopy := default (dict) .Values.entrypointCopy }}
   {{- $entryImage := default (dict) $entrypointCopy.image }}

@@ -67,47 +67,48 @@ func (d *Decompressor) scanAndDecompress(rootPath string) (int, int, error) {
 	var fileCount int
 	var splitMapCount int
 
-	err = filepath.Walk(rootPath, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			log.Printf("decompressor: walk error at %s: %v", path, walkErr)
-			return nil // Continue walking
-		}
+	// Read directory entries (non-recursive for efficiency)
+	entries, err := os.ReadDir(rootPath)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read dir %s: %w", rootPath, err)
+	}
 
-		// Check for split map folders (folders ending with .bsp or .bsp.bz2.parts)
-		if info.IsDir() {
-			lowerName := strings.ToLower(info.Name())
+	log.Printf("decompressor: scanning %d entries in %s", len(entries), rootPath)
+
+	for _, entry := range entries {
+		path := filepath.Join(rootPath, entry.Name())
+
+		// Check for split map folders
+		if entry.IsDir() {
+			lowerName := strings.ToLower(entry.Name())
 			if strings.HasSuffix(lowerName, ".bsp") || strings.HasSuffix(lowerName, ".bsp.bz2.parts") {
 				log.Printf("decompressor: found split map folder: %s", path)
 				if err := processSplitMap(path); err != nil {
-					return fmt.Errorf("process split map %s: %w", path, err)
+					log.Printf("decompressor: error processing split map %s: %v", path, err)
+					continue
 				}
 				splitMapCount++
-				return filepath.SkipDir // Don't walk into the split map folder
 			}
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
+			continue // Skip other directories
 		}
 
 		// Check if file ends with .bz2
-		if !strings.HasSuffix(strings.ToLower(path), ".bz2") {
-			return nil
+		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".bz2") {
+			continue
 		}
 
 		log.Printf("decompressor: found bz2 file: %s", path)
 
 		// Decompress the file
 		if err := decompressFile(path); err != nil {
-			return fmt.Errorf("decompress %s: %w", path, err)
+			log.Printf("decompressor: error decompressing %s: %v", path, err)
+			continue
 		}
 
 		fileCount++
-		return nil
-	})
+	}
 
-	return fileCount, splitMapCount, err
+	return fileCount, splitMapCount, nil
 }
 
 func decompressFile(bzipPath string) error {

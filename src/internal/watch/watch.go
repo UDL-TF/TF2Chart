@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -40,6 +41,11 @@ func (m *Manager) Run(ctx context.Context) error {
 		return fmt.Errorf("initial merge: %w", err)
 	}
 	log.Printf("watcher: initial merge completed successfully")
+
+	// Debug: count open file descriptors
+	if fds, err := countOpenFileDescriptors(); err == nil {
+		log.Printf("watcher: open file descriptors after merge: %d", fds)
+	}
 
 	mergeRequests := make(chan struct{}, 1)
 	immediateRequests := make(chan struct{}, 1)
@@ -181,4 +187,18 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func countOpenFileDescriptors() (int, error) {
+	fds, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		// Fallback: try to get rlimit
+		var rLimit syscall.Rlimit
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err == nil {
+			// Can't get exact count, return limit info as negative number to indicate estimation
+			return -1, fmt.Errorf("cannot count (limit is %d)", rLimit.Cur)
+		}
+		return 0, err
+	}
+	return len(fds), nil
 }

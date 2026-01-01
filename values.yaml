@@ -85,6 +85,9 @@ merger:
     watchBase: true
   # Runtime decompression: paths to scan for .bz2 files during merge operations.
   # When the watcher detects new files, it will decompress any .bz2 files found in these paths.
+  # IMPORTANT: Overlays referenced in these paths will automatically be mounted as writable
+  # for both the stitcher init container and watcher sidecar to allow decompression.
+  # Example: ["/mnt/overlays/maps", "/mnt/overlays/custom"]
   decompressPaths: []  # e.g., ["/mnt/overlays/maps", "/mnt/overlays/custom"]
 
 initContainers:
@@ -94,6 +97,8 @@ initContainers:
 # Decompressor init container
 # Scans base and overlay paths for .bz2 files, decompresses them, and removes the archives.
 # This runs before the stitcher to ensure map files are decompressed before merging.
+# IMPORTANT: Overlays listed in scanOverlays will automatically be mounted as writable
+# for the decompressor init container to allow decompression.
 decompressor:
   enabled: true
   image:

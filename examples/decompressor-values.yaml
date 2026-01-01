@@ -31,6 +31,8 @@ merger:
   # Runtime decompression: automatically decompress new .bz2 files when detected
   # When the watcher detects new files from git-sync or other sources, it will
   # scan these paths and decompress any .bz2 files before merging.
+  # IMPORTANT: These paths MUST be writable. The template automatically makes
+  # overlay mounts writable when they match paths in decompressPaths.
   decompressPaths:
     - /mnt/overlays/maps
     - /mnt/overlays/custom
@@ -112,4 +114,11 @@ app:
 #   bhop_arcane2_a06.bsp.bz2.part.002
 # - Parts are concatenated, then decompressed as a single bz2 stream
 # - Result: Single bhop_arcane2_a06.bsp file
+#
+# Write Access for Decompression:
+# - The decompressor needs write access to create temporary files and write decompressed output
+# - Init container (decompressor): Overlays are mounted WITHOUT readOnly by default
+# - Sidecar (watcher): Overlays listed in merger.decompressPaths are automatically made writable
+# - The template detects which overlays need write access based on decompressPaths and scanOverlays
+# - You don't need to manually set readOnly: false on overlays that need decompression
 

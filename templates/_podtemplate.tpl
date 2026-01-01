@@ -220,6 +220,19 @@ spec:
   {{- end }}
   {{- $mergePermissions := dict "applyDuringMerge" $fixViewLayer "applyPaths" $applyPaths "user" $permUser "group" $permGroup "mode" $permMode }}
   {{- $decompressPaths := default (list) .Values.merger.decompressPaths }}
+  {{- /* Build a set of overlay names that need write access for decompression */ -}}
+  {{- $decompWritableOverlays := dict }}
+  {{- range $decompPath := $decompressPaths }}
+    {{- /* Check if this decompress path matches any overlay mount path */ -}}
+    {{- range $overlay := $.Values.overlays }}
+      {{- $overlayMount := printf "/mnt/overlays/%s" $overlay.name }}
+      {{- if hasPrefix $overlayMount $decompPath }}
+        {{- $_ := set $decompWritableOverlays $overlay.name true }}
+      {{- else if hasPrefix $decompPath $overlayMount }}
+        {{- $_ := set $decompWritableOverlays $overlay.name true }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
   {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths "decompressPaths" $decompressPaths }}
   {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
   {{- with .Values.podSecurityContext }}
@@ -492,6 +505,9 @@ spec:
           mountPath: {{ .Values.paths.containerTarget }}
         {{- range .Values.overlays }}
         {{- $overlayReadOnly := default true .readOnly }}
+        {{- if hasKey $decompWritableOverlays .name }}
+          {{- $overlayReadOnly = false }}
+        {{- end }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
           {{- if .subPath }}

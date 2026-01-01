@@ -3,10 +3,8 @@ package watch
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -77,40 +75,20 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 	defer watcher.Close()
 
-	watched := map[string]struct{}{}
-	addRecursive := func(root string) {
-		if root == "" {
-			return
-		}
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			log.Printf("watch mkdir %s: %v", root, err)
-			return
-		}
-		filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				if errors.Is(walkErr, os.ErrNotExist) {
-					return filepath.SkipDir
-				}
-				log.Printf("watch walk %s: %v", path, walkErr)
-				return filepath.SkipDir
-			}
-			if !d.IsDir() {
-				return nil
-			}
-			if _, ok := watched[path]; ok {
-				return nil
-			}
-			if err := watcher.Add(path); err != nil {
-				log.Printf("watch add %s: %v", path, err)
-				return filepath.SkipDir
-			}
-			watched[path] = struct{}{}
-			return nil
-		})
-	}
-
+	// Add only the top-level watch paths (non-recursive)
 	for _, path := range m.cfg.WatchPaths {
-		addRecursive(path)
+		if path == "" {
+			continue
+		}
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			log.Printf("watch mkdir %s: %v", path, err)
+			continue
+		}
+		if err := watcher.Add(path); err != nil {
+			log.Printf("watch add %s: %v", path, err)
+			continue
+		}
+		log.Printf("watching: %s", path)
 	}
 
 	for {
@@ -120,11 +98,6 @@ func (m *Manager) Run(ctx context.Context) error {
 		case <-pollChan:
 			m.requestImmediate(immediateRequests)
 		case evt := <-watcher.Events:
-			if evt.Op&fsnotify.Create != 0 {
-				if info, err := os.Stat(evt.Name); err == nil && info.IsDir() {
-					addRecursive(evt.Name)
-				}
-			}
 			if evt.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) != 0 {
 				m.requestMerge(mergeRequests)
 			}

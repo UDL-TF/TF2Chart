@@ -18,6 +18,11 @@ func main() {
 	watchEnv := flag.String("watcher-config-env", "WATCHER_CONFIG", "env var containing watcher JSON")
 	flag.Parse()
 
+	// Increase file descriptor limit to handle large directories
+	if err := increaseFileDescriptorLimit(); err != nil {
+		log.Printf("warning: failed to increase file descriptor limit: %v", err)
+	}
+
 	log.Printf("watcher starting (mergeEnv=%s watcherEnv=%s)", *mergeEnv, *watchEnv)
 	mergeCfg, err := config.FromEnv[config.MergeConfig](*mergeEnv)
 	if err != nil {
@@ -55,4 +60,21 @@ func main() {
 		log.Fatalf("watcher exited: %v", err)
 	}
 	log.Printf("watcher stopped cleanly")
+}
+
+func increaseFileDescriptorLimit() error {
+	var rLimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		return err
+	}
+	log.Printf("current file descriptor limits: soft=%d hard=%d", rLimit.Cur, rLimit.Max)
+
+	// Try to set soft limit to hard limit (maximum allowed)
+	rLimit.Cur = rLimit.Max
+	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		return err
+	}
+
+	log.Printf("increased file descriptor soft limit to %d", rLimit.Cur)
+	return nil
 }

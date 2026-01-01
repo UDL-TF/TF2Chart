@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -34,9 +35,11 @@ func NewManager(merger *merge.Merger, cfg *config.WatcherConfig) (*Manager, erro
 
 // Run blocks until the context is cancelled and reacts to filesystem events.
 func (m *Manager) Run(ctx context.Context) error {
+	log.Printf("watcher: running initial merge...")
 	if err := m.merger.Run(ctx); err != nil {
-		return err
+		return fmt.Errorf("initial merge: %w", err)
 	}
+	log.Printf("watcher: initial merge completed successfully")
 
 	mergeRequests := make(chan struct{}, 1)
 	immediateRequests := make(chan struct{}, 1)
@@ -71,12 +74,14 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return err
+		return fmt.Errorf("create fsnotify watcher: %w", err)
 	}
 	defer watcher.Close()
 
+	log.Printf("watcher: created fsnotify watcher successfully")
+
 	// Add only the top-level watch paths (non-recursive)
-	for _, path := range m.cfg.WatchPaths {
+	for i, path := range m.cfg.WatchPaths {
 		if path == "" {
 			continue
 		}
@@ -84,11 +89,11 @@ func (m *Manager) Run(ctx context.Context) error {
 			log.Printf("watch mkdir %s: %v", path, err)
 			continue
 		}
+		log.Printf("watcher: attempting to add watch %d/%d: %s", i+1, len(m.cfg.WatchPaths), path)
 		if err := watcher.Add(path); err != nil {
-			log.Printf("watch add %s: %v", path, err)
-			continue
+			return fmt.Errorf("add watch for %s: %w", path, err)
 		}
-		log.Printf("watching: %s", path)
+		log.Printf("watcher: successfully watching: %s", path)
 	}
 
 	for {

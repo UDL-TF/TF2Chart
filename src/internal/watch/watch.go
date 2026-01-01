@@ -47,6 +47,11 @@ func (m *Manager) Run(ctx context.Context) error {
 		log.Printf("watcher: open file descriptors after merge: %d", fds)
 	}
 
+	// Check inotify limits before creating watcher
+	if err := checkInotifyLimits(); err != nil {
+		log.Printf("watcher: inotify limit check: %v", err)
+	}
+
 	mergeRequests := make(chan struct{}, 1)
 	immediateRequests := make(chan struct{}, 1)
 	go m.mergeLoop(ctx, mergeRequests, immediateRequests)
@@ -80,7 +85,31 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("create fsnotify watcher: %w", err)
+		log.Printf("watcher: FAILED to create fsnotify watcher: %v", err)
+		log.Printf("watcher: falling back to poll-only mode (interval=%ds)", m.cfg.PollIntervalSeconds)
+
+		// Fallback to polling mode when fsnotify fails
+		if pollChan == nil {
+			// Use debounce as poll interval if not configured
+			pollInterval := time.Duration(m.cfg.PollIntervalSeconds) * time.Second
+			if pollInterval == 0 {
+				pollInterval = m.debounce * 2 // Default to 2x debounce time
+			}
+			pollTicker = time.NewTicker(pollInterval)
+			defer pollTicker.Stop()
+			pollChan = pollTicker.C
+			log.Printf("watcher: configured polling every %s", pollInterval)
+		}
+
+		// Run in poll-only mode
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-pollChan:
+				m.requestImmediate(immediateRequests)
+			}
+		}
 	}
 	defer watcher.Close()
 
@@ -201,4 +230,23 @@ func countOpenFileDescriptors() (int, error) {
 		return 0, err
 	}
 	return len(fds), nil
+}
+
+func checkInotifyLimits() error {
+	// Try to read inotify limits
+	maxInstances, err := os.ReadFile("/proc/sys/fs/inotify/max_user_instances")
+	if err != nil {
+		return fmt.Errorf("cannot read max_user_instances: %w", err)
+	}
+
+	maxWatches, err := os.ReadFile("/proc/sys/fs/inotify/max_user_watches")
+	if err != nil {
+		return fmt.Errorf("cannot read max_user_watches: %w", err)
+	}
+
+	log.Printf("inotify limits: max_user_instances=%s max_user_watches=%s",
+		string(maxInstances[:len(maxInstances)-1]),
+		string(maxWatches[:len(maxWatches)-1]))
+
+	return nil
 }

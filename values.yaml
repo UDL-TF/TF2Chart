@@ -83,6 +83,9 @@ merger:
       runAsNonRoot: false
     extraVolumeMounts: []
     watchBase: true
+  # Runtime decompression: paths to scan for .bz2 files during merge operations.
+  # When the watcher detects new files, it will decompress any .bz2 files found in these paths.
+  decompressPaths: []  # e.g., ["/mnt/overlays/maps", "/mnt/overlays/custom"]
 
 initContainers:
   pre: []

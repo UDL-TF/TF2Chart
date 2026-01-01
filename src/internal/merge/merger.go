@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/UDL-TF/TF2Chart/src/internal/config"
+	"github.com/UDL-TF/TF2Chart/src/internal/decompress"
 )
 
 // Merger renders the merged TF2 content tree according to MergeConfig.
@@ -47,6 +48,15 @@ func (m *Merger) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
+	// Decompress any .bz2 files in configured paths before merging
+	if len(m.cfg.DecompressPaths) > 0 {
+		decompressor := decompress.New(m.cfg.DecompressPaths)
+		if err := decompressor.Run(); err != nil {
+			return fmt.Errorf("decompress: %w", err)
+		}
+	}
+
 	if err := mergeTree(m.cfg.BasePath, m.cfg.TargetBase, nil); err != nil {
 		return fmt.Errorf("merge base: %w", err)
 	}

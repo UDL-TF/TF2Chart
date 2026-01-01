@@ -1,8 +1,8 @@
 # Example configuration for TF2Chart with bz2 decompression
 #
-# This example shows how to configure the decompressor init container
-# to automatically decompress .bz2 files (commonly used for TF2 map files)
-# before the stitcher merges the overlays.
+# This example shows how to configure:
+# 1. The decompressor init container to decompress .bz2 files on startup
+# 2. Runtime decompression when new .bz2 files are synced (e.g., via git-sync)
 
 paths:
   hostSource: /tf/standalone
@@ -24,7 +24,23 @@ overlays:
     hostPathType: Directory
     readOnly: true
 
-# Decompressor configuration
+# Merger configuration
+merger:
+  enabled: true
+  
+  # Runtime decompression: automatically decompress new .bz2 files when detected
+  # When the watcher detects new files from git-sync or other sources, it will
+  # scan these paths and decompress any .bz2 files before merging.
+  decompressPaths:
+    - /mnt/overlays/maps
+    - /mnt/overlays/custom
+  
+  watcher:
+    enabled: true
+    debounceSeconds: 2
+    pollIntervalSeconds: 300
+
+# Decompressor init container - runs once on startup
 decompressor:
   enabled: true
   image:
@@ -70,17 +86,30 @@ app:
     - name: SRCDS_MAXPLAYERS
       value: "24"
 
-# Note: The decompressor will:
-# 1. Scan /mnt/base for any .bz2 files
-# 2. Scan /mnt/overlays/maps for any .bz2 files
-# 3. Scan /mnt/overlays/custom for any .bz2 files
-# 4. Decompress each .bz2 file in-place
-# 5. Remove the .bz2 archive after successful decompression
-# 6. Handle split maps in folders ending with .bsp or .bsp.bz2.parts:
-#    - Folders like "bhop_arcane2_a06.bsp.bz2.parts/" containing:
-#      bhop_arcane2_a06.bsp.bz2.part.000
-#      bhop_arcane2_a06.bsp.bz2.part.001
-#      bhop_arcane2_a06.bsp.bz2.part.002
-#    - Parts are concatenated, then decompressed as a single bz2 stream
-#    - Result: Single bhop_arcane2_a06.bsp file (169 MB from 90 MB compressed)
-# 7. Run before the stitcher merges the layers
+# How decompression works:
+#
+# STARTUP (Init Container):
+# 1. Scans /mnt/base for any .bz2 files
+# 2. Scans /mnt/overlays/maps for any .bz2 files
+# 3. Scans /mnt/overlays/custom for any .bz2 files
+# 4. Decompresses each .bz2 file in-place
+# 5. Removes the .bz2 archive after successful decompression
+# 6. Handles split maps in folders ending with .bsp or .bsp.bz2.parts
+#
+# RUNTIME (Watcher + Merger):
+# When new files are synced (e.g., via git-sync):
+# 1. Watcher detects filesystem changes in overlay directories
+# 2. Merger is triggered to re-merge the layers
+# 3. Before merging, decompressor scans configured decompressPaths
+# 4. Any new .bz2 files are automatically decompressed
+# 5. Merge proceeds with decompressed files
+# 6. TF2 server has access to new maps without pod restart
+#
+# Split Map Support:
+# - Folders like "bhop_arcane2_a06.bsp.bz2.parts/" containing:
+#   bhop_arcane2_a06.bsp.bz2.part.000
+#   bhop_arcane2_a06.bsp.bz2.part.001
+#   bhop_arcane2_a06.bsp.bz2.part.002
+# - Parts are concatenated, then decompressed as a single bz2 stream
+# - Result: Single bhop_arcane2_a06.bsp file
+

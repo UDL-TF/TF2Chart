@@ -200,6 +200,18 @@ merger:
 
 The watcher uses inotify events + polling to detect changes, automatically re-merging without pod restarts.
 
+**Runtime Decompression:** When new files are synced (e.g., via git-sync), the watcher triggers a merge operation that includes automatic decompression of any `.bz2` files found in the configured `decompressPaths`. This ensures that newly added compressed maps are automatically decompressed and made available without manual intervention or pod restarts.
+
+Configure decompression paths in your merge configuration:
+
+```yaml
+merger:
+  config:
+    decompressPaths:
+      - /mnt/overlays/maps
+      - /mnt/overlays/custom
+```
+
 **Example: Git-sync with atomic swaps**
 
 When using git-sync, updates happen via atomic directory swaps (symlink changes). Set `watchParentDepth: 1` to detect these:

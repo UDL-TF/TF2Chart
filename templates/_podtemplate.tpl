@@ -219,7 +219,8 @@ spec:
     {{- end }}
   {{- end }}
   {{- $mergePermissions := dict "applyDuringMerge" $fixViewLayer "applyPaths" $applyPaths "user" $permUser "group" $permGroup "mode" $permMode }}
-  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths }}
+  {{- $decompressPaths := default (list) .Values.merger.decompressPaths }}
+  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths "decompressPaths" $decompressPaths }}
   {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
   {{- with .Values.podSecurityContext }}
   securityContext:

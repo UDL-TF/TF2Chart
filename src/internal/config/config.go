@@ -13,14 +13,15 @@ var ErrMissingEnv = errors.New("configuration env missing")
 
 // MergeConfig describes all inputs required to render the merged TF2 tree.
 type MergeConfig struct {
-	BasePath      string          `json:"basePath"`
-	TargetBase    string          `json:"targetBase"`
-	TargetContent string          `json:"targetContent"`
-	Overlays      []Overlay       `json:"overlays"`
-	WritablePaths []WritablePath  `json:"writablePaths"`
-	CopyTemplates []CopyTemplate  `json:"copyTemplates"`
-	Permissions   PermissionPhase `json:"permissions"`
-	ExcludePaths  []string        `json:"excludePaths,omitempty"` // Paths to exclude from overlay merge
+	BasePath        string          `json:"basePath"`
+	TargetBase      string          `json:"targetBase"`
+	TargetContent   string          `json:"targetContent"`
+	Overlays        []Overlay       `json:"overlays"`
+	WritablePaths   []WritablePath  `json:"writablePaths"`
+	CopyTemplates   []CopyTemplate  `json:"copyTemplates"`
+	Permissions     PermissionPhase `json:"permissions"`
+	ExcludePaths    []string        `json:"excludePaths,omitempty"`    // Paths to exclude from overlay merge
+	DecompressPaths []string        `json:"decompressPaths,omitempty"` // Paths to scan for .bz2 files and decompress
 }
 
 // Overlay represents a stitched layer sourced from a mounted volume.

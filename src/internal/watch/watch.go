@@ -9,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
 	"github.com/UDL-TF/TF2Chart/src/internal/config"
 	"github.com/UDL-TF/TF2Chart/src/internal/merge"
 )
@@ -42,107 +40,26 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 	log.Printf("watcher: initial merge completed successfully")
 
-	// Debug: count open file descriptors
-	if fds, err := countOpenFileDescriptors(); err == nil {
-		log.Printf("watcher: open file descriptors after merge: %d", fds)
-	}
-
-	// Check inotify limits before creating watcher
-	if err := checkInotifyLimits(); err != nil {
-		log.Printf("watcher: inotify limit check: %v", err)
-	}
-
 	mergeRequests := make(chan struct{}, 1)
 	immediateRequests := make(chan struct{}, 1)
 	go m.mergeLoop(ctx, mergeRequests, immediateRequests)
 
-	var pollTicker *time.Ticker
-	if m.cfg.PollIntervalSeconds > 0 {
-		pollTicker = time.NewTicker(time.Duration(m.cfg.PollIntervalSeconds) * time.Second)
-		defer pollTicker.Stop()
-	}
-	var pollChan <-chan time.Time
-	if pollTicker != nil {
-		pollChan = pollTicker.C
+	// Use polling mode exclusively - more reliable for containers
+	pollInterval := time.Duration(m.cfg.PollIntervalSeconds) * time.Second
+	if pollInterval == 0 {
+		pollInterval = 10 * time.Second // Default to 10 seconds
 	}
 
-	if len(m.cfg.WatchPaths) == 0 {
-		// Poll-only mode.
-		if pollChan == nil {
-			fallback := time.NewTicker(m.debounce)
-			defer fallback.Stop()
-			pollChan = fallback.C
-		}
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-pollChan:
-				m.requestImmediate(immediateRequests)
-			}
-		}
-	}
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Printf("watcher: FAILED to create fsnotify watcher: %v", err)
-		log.Printf("watcher: falling back to poll-only mode (interval=%ds)", m.cfg.PollIntervalSeconds)
-
-		// Fallback to polling mode when fsnotify fails
-		if pollChan == nil {
-			// Use debounce as poll interval if not configured
-			pollInterval := time.Duration(m.cfg.PollIntervalSeconds) * time.Second
-			if pollInterval == 0 {
-				pollInterval = m.debounce * 2 // Default to 2x debounce time
-			}
-			pollTicker = time.NewTicker(pollInterval)
-			defer pollTicker.Stop()
-			pollChan = pollTicker.C
-			log.Printf("watcher: configured polling every %s", pollInterval)
-		}
-
-		// Run in poll-only mode
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-pollChan:
-				m.requestImmediate(immediateRequests)
-			}
-		}
-	}
-	defer watcher.Close()
-
-	log.Printf("watcher: created fsnotify watcher successfully")
-
-	// Add only the top-level watch paths (non-recursive)
-	for i, path := range m.cfg.WatchPaths {
-		if path == "" {
-			continue
-		}
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			log.Printf("watch mkdir %s: %v", path, err)
-			continue
-		}
-		log.Printf("watcher: attempting to add watch %d/%d: %s", i+1, len(m.cfg.WatchPaths), path)
-		if err := watcher.Add(path); err != nil {
-			return fmt.Errorf("add watch for %s: %w", path, err)
-		}
-		log.Printf("watcher: successfully watching: %s", path)
-	}
+	log.Printf("watcher: using poll-only mode (interval=%s)", pollInterval)
+	pollTicker := time.NewTicker(pollInterval)
+	defer pollTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-pollChan:
+		case <-pollTicker.C:
 			m.requestImmediate(immediateRequests)
-		case evt := <-watcher.Events:
-			if evt.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) != 0 {
-				m.requestMerge(mergeRequests)
-			}
-		case err := <-watcher.Errors:
-			log.Printf("watch error: %v", err)
 		}
 	}
 }

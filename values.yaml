@@ -69,7 +69,7 @@ merger:
       - delete_self
       - move_self
     debounceSeconds: 2
-    pollIntervalSeconds: 300
+    pollIntervalSeconds: 10
     watchPaths: []
     watchParentDepth: 1  # Watch parent directories for git-sync atomic swaps
     extraWatchPaths: []  # Additional paths to monitor beyond auto-detected overlays

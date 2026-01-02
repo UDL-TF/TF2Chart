@@ -29,6 +29,14 @@ spec:
   {{- $decompImagePullPolicy := default "Always" $decompImage.pullPolicy }}
   {{- $decompScanBase := ne (default true $decompressor.scanBase) false }}
   {{- $decompScanOverlays := default (list) $decompressor.scanOverlays }}
+  {{- $decompCachePath := default "" $decompressor.cachePath }}
+  {{- $mergerCachePath := default "" .Values.merger.decompressionCachePath }}
+  {{- $cacheEnabled := or (ne $decompCachePath "") (ne $mergerCachePath "") }}
+  {{- $finalCachePath := ternary $mergerCachePath $decompCachePath (ne $mergerCachePath "") }}
+  {{- $decompCacheVolume := default (dict) $decompressor.cacheVolume }}
+  {{- $mergerCacheVolume := default (dict) .Values.merger.cacheVolume }}
+  {{- $finalCacheVolume := ternary $mergerCacheVolume $decompCacheVolume (gt (len $mergerCacheVolume) 0) }}
+  {{- $cacheVolumeType := default "emptyDir" $finalCacheVolume.type }}
   {{- $permissionsInit := default (dict) .Values.permissionsInit }}
   {{- $permEnabled := and (ne (default true $permissionsInit.enabled) false) true }}
   {{- $permPathRaw := default "" $permissionsInit.path }}
@@ -233,7 +241,7 @@ spec:
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths "decompressPaths" $decompressPaths }}
+  {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths "decompressPaths" $decompressPaths "decompressionCachePath" $finalCachePath }}
   {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
   {{- with .Values.podSecurityContext }}
   securityContext:
@@ -264,6 +272,27 @@ spec:
         type: {{ .hostPathType | default "Directory" }}
       {{- end }}
     {{- end }}
+    {{- if $cacheEnabled }}
+    - name: decompressor-cache
+      {{- if eq $cacheVolumeType "hostPath" }}
+      hostPath:
+        {{- toYaml $finalCacheVolume.hostPath | nindent 8 }}
+      {{- else if eq $cacheVolumeType "persistentVolumeClaim" }}
+      persistentVolumeClaim:
+        {{- toYaml $finalCacheVolume.persistentVolumeClaim | nindent 8 }}
+      {{- else if eq $cacheVolumeType "configMap" }}
+      configMap:
+        {{- toYaml $finalCacheVolume.configMap | nindent 8 }}
+      {{- else if eq $cacheVolumeType "secret" }}
+      secret:
+        {{- toYaml $finalCacheVolume.secret | nindent 8 }}
+      {{- else if eq $cacheVolumeType "nfs" }}
+      nfs:
+        {{- toYaml $finalCacheVolume.nfs | nindent 8 }}
+      {{- else }}
+      emptyDir: {}
+      {{- end }}
+    {{- end }}
     {{- with .Values.extraVolumes }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -292,6 +321,9 @@ spec:
         {{- end }}
         - {{ printf "-overlays=%s" (join "," $overlayPaths) }}
         {{- end }}
+        {{- if $cacheEnabled }}
+        - {{ printf "-cache=%s" $finalCachePath }}
+        {{- end }}
       {{- with $decompressor.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -308,6 +340,10 @@ spec:
         {{- range $decompScanOverlays }}
         - name: layer-{{ . }}
           mountPath: /mnt/overlays/{{ . }}
+        {{- end }}
+        {{- if $cacheEnabled }}
+        - name: decompressor-cache
+          mountPath: {{ dir $finalCachePath }}
         {{- end }}
         {{- with $decompressor.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -342,6 +378,10 @@ spec:
           {{- if .subPath }}
           subPath: {{ .subPath }}
           {{- end }}
+        {{- end }}
+        {{- if $cacheEnabled }}
+        - name: decompressor-cache
+          mountPath: {{ dir $finalCachePath }}
         {{- end }}
         {{- with .Values.merger.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -516,6 +556,10 @@ spec:
           {{- if $overlayReadOnly }}
           readOnly: true
           {{- end }}
+        {{- end }}
+        {{- if $cacheEnabled }}
+        - name: decompressor-cache
+          mountPath: {{ dir $finalCachePath }}
         {{- end }}
         {{- with $watcherValues.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}

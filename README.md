@@ -129,6 +129,7 @@ Automatically decompress .bz2 files before merging. Useful for TF2 map files tha
 ```yaml
 decompressor:
   enabled: true
+  cachePath: /cache/decompression.cache # optional: enable cache to prevent git-lfs pointer overwrites
   image:
     repository: ghcr.io/udl-tf/tf2chart-decompressor
     tag: latest
@@ -136,9 +137,28 @@ decompressor:
   scanOverlays:
     - maps # scan specific overlay layers
     - custom
+
+# Runtime decompression with watcher
+merger:
+  decompressionCachePath: /cache/decompression.cache # optional: must match decompressor.cachePath
+  decompressPaths:
+    - /mnt/overlays/maps # paths to scan for .bz2 files when watcher detects changes
+  watcher:
+    enabled: true
 ```
 
 The decompressor runs as an init container before the stitcher, scanning specified paths for `.bz2` files, decompressing them in-place, and removing the compressed archives. This ensures map files and other compressed content are ready before the merge process begins.
+
+**Git-LFS Protection with Cache:**
+
+When using git-sync with git-lfs to distribute maps, git-sync periodically overwrites decompressed `.bsp` files with small git-lfs pointer files. The cache prevents this:
+
+1. Tracks SHA256 hash of every decompressed file
+2. Detects when git-lfs overwrites a file with a pointer
+3. Automatically re-decompresses the file
+4. Ensures FastDL always serves actual maps, not pointers
+
+**Quick Enable:** Just set `cachePath` in both `decompressor` and `merger` to the same path. See [ENABLE_CACHE.md](ENABLE_CACHE.md) for details.
 
 **Split Map Support:**
 
@@ -281,6 +301,7 @@ go test ./...
 docker build -f cmd/merger/Dockerfile -t ghcr.io/udl-tf/tf2chart-merger:latest .
 docker build -f cmd/permissions/Dockerfile -t ghcr.io/udl-tf/tf2chart-permissions:latest .
 docker build -f cmd/watcher/Dockerfile -t ghcr.io/udl-tf/tf2chart-watcher:latest .
+docker build -f cmd/decompressor/Dockerfile -t ghcr.io/udl-tf/tf2chart-decompressor:latest .
 ```
 
 ## License

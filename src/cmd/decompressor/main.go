@@ -12,6 +12,7 @@ import (
 func main() {
 	basePath := flag.String("base", "/mnt/base", "base path to check for .bz2 files")
 	overlayPaths := flag.String("overlays", "", "comma-separated overlay paths to check (e.g., /mnt/overlays/maps,/mnt/overlays/custom)")
+	cachePath := flag.String("cache", "", "path to cache file for tracking decompressed files (e.g., /tmp/decompressor-cache.json)")
 	flag.Parse()
 
 	// Increase file descriptor limit to handle large directories
@@ -41,8 +42,8 @@ func main() {
 		log.Fatal("no paths to scan provided")
 	}
 
-	// Create and run decompressor
-	decompressor := decompress.New(pathsToScan)
+	// Create and run decompressor with cache support
+	decompressor := decompress.NewWithCache(pathsToScan, *cachePath)
 	if err := decompressor.Run(); err != nil {
 		log.Fatalf("decompression failed: %v", err)
 	}

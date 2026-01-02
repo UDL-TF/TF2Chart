@@ -51,7 +51,7 @@ func (m *Merger) Run(ctx context.Context) error {
 
 	// Decompress any .bz2 files in configured paths before merging
 	if len(m.cfg.DecompressPaths) > 0 {
-		decompressor := decompress.NewWithCache(m.cfg.DecompressPaths, m.cfg.DecompressionCachePath)
+		decompressor := decompress.NewWithOutputDir(m.cfg.DecompressPaths, m.cfg.DecompressionOutputDir)
 		if err := decompressor.Run(); err != nil {
 			return fmt.Errorf("decompress: %w", err)
 		}

@@ -60,19 +60,6 @@ merger:
   # for both the stitcher init container and watcher sidecar to allow decompression.
   # Example: ["/mnt/overlays/maps", "/mnt/overlays/custom"]
   decompressPaths: []  # e.g., ["/mnt/overlays/maps", "/mnt/overlays/custom"]
-  # Decompression cache: path to cache file that tracks decompressed files.
-  # When enabled, the decompressor will:
-  # - Track SHA256 hashes of decompressed files
-  # - Detect git-lfs pointers that have overwritten decompressed content
-  # - Automatically re-decompress files when git-sync overwrites them with pointers
-  # This prevents FastDL issues where players would download git-lfs pointers instead of actual content.
-  # RECOMMENDED: Set to a persistent path like "/mnt/cache/decompressor-cache.json"
-  # Leave empty to disable caching (not recommended for git-sync workflows)
-  decompressionCachePath: ""  # e.g., "/mnt/cache/decompressor-cache.json"
-  # Cache volume configuration (optional, shared with decompressor.cacheVolume)
-  # If not specified, an emptyDir volume will be created when decompressionCachePath is set
-  # Override this to use hostPath, PVC, or other volume types (same options as decompressor.cacheVolume)
-  cacheVolume: {}
   watcher:
     enabled: true
     image:
@@ -120,22 +107,6 @@ decompressor:
     pullPolicy: Always
   scanBase: true  # Scan the base path for .bz2 files
   scanOverlays: []  # List of overlay names to scan (e.g., ["maps", "custom"])
-  # Cache path for tracking decompressed files (same as merger.decompressionCachePath)
-  # Should be set to a persistent volume to survive pod restarts
-  cachePath: ""  # e.g., "/cache/decompression.cache"
-  # Cache volume configuration (optional)
-  # If not specified, an emptyDir volume will be created when cachePath is set
-  # Override this to use hostPath, PVC, or other volume types
-  cacheVolume: {}
-    # Example hostPath:
-    # type: hostPath
-    # hostPath:
-    #   path: /mnt/tf2-cache
-    #   type: DirectoryOrCreate
-    # Example PVC:
-    # type: persistentVolumeClaim
-    # persistentVolumeClaim:
-    #   claimName: tf2-cache-pvc
   resources: {}
   securityContext:
     runAsUser: 0

@@ -22,7 +22,7 @@ type MergeConfig struct {
 	Permissions            PermissionPhase `json:"permissions"`
 	ExcludePaths           []string        `json:"excludePaths,omitempty"`           // Paths to exclude from overlay merge
 	DecompressPaths        []string        `json:"decompressPaths,omitempty"`        // Paths to scan for .bz2 files and decompress
-	DecompressionCachePath string          `json:"decompressionCachePath,omitempty"` // Path to decompression cache file
+	DecompressionOutputDir string          `json:"decompressionOutputDir,omitempty"` // Output directory for decompressed files (preserves structure)
 }
 
 // Overlay represents a stitched layer sourced from a mounted volume.

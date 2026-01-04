@@ -337,18 +337,43 @@ func (d *Decompressor) processSplitMap(folderPath string) error {
 }
 
 // getOutputPath determines the output path for a decompressed file
-// Outputs directly to cache root without preserving directory structure
+// Preserves one level of directory structure (e.g., maps/, cfg/, materials/)
 func (d *Decompressor) getOutputPath(bzipPath string) string {
 	// Remove .bz2 extension from filename
 	decompressedName := strings.TrimSuffix(filepath.Base(bzipPath), ".bz2")
+
+	// Try to detect the content type directory (maps, cfg, materials, etc.)
+	// by looking for common TF2 directories in the path
+	var subDir string
+	absPath, _ := filepath.Abs(bzipPath)
+	pathLower := strings.ToLower(absPath)
 	
-	// Output directly to cache root
-	outPath := filepath.Join(d.outputDir, decompressedName)
+	// Common TF2 content directories to preserve
+	contentDirs := []string{"maps", "cfg", "materials", "models", "sound", "particles", "resource", "scripts", "media", "custom"}
 	
+	for _, dir := range contentDirs {
+		// Look for /dirName/ in the path
+		pattern := fmt.Sprintf("/%s/", dir)
+		if strings.Contains(pathLower, pattern) {
+			subDir = dir
+			break
+		}
+	}
+	
+	// Build output path
+	var outPath string
+	if subDir != "" {
+		// Preserve the content directory structure
+		outPath = filepath.Join(d.outputDir, subDir, decompressedName)
+	} else {
+		// Fallback to root if no recognized directory
+		outPath = filepath.Join(d.outputDir, decompressedName)
+	}
+
 	// Ensure output directory exists
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 		log.Printf("decompressor: warning - failed to create output directory: %v", err)
 	}
-	
+
 	return outPath
 }

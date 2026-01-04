@@ -337,37 +337,18 @@ func (d *Decompressor) processSplitMap(folderPath string) error {
 }
 
 // getOutputPath determines the output path for a decompressed file
-// Preserves directory structure relative to scan paths
+// Outputs directly to cache root without preserving directory structure
 func (d *Decompressor) getOutputPath(bzipPath string) string {
-	// Remove .bz2 extension first
+	// Remove .bz2 extension from filename
 	decompressedName := strings.TrimSuffix(filepath.Base(bzipPath), ".bz2")
-
-	// Find which scan path this file belongs to
-	for _, scanPath := range d.paths {
-		absPath, _ := filepath.Abs(bzipPath)
-		absScan, _ := filepath.Abs(scanPath)
-
-		if strings.HasPrefix(absPath, absScan) {
-			// Get relative path from scan path
-			relPath, err := filepath.Rel(absScan, absPath)
-			if err != nil {
-				continue
-			}
-			// Remove .bz2 from relative path
-			relPath = strings.TrimSuffix(relPath, ".bz2")
-
-			// Ensure output directory structure exists
-			outPath := filepath.Join(d.outputDir, relPath)
-			if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-				log.Printf("decompressor: warning - failed to create output directory: %v", err)
-			}
-
-			return outPath
-		}
-	}
-
-	// Fallback: just output to outputDir with decompressed name
+	
+	// Output directly to cache root
 	outPath := filepath.Join(d.outputDir, decompressedName)
-	os.MkdirAll(filepath.Dir(outPath), 0755)
+	
+	// Ensure output directory exists
+	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+		log.Printf("decompressor: warning - failed to create output directory: %v", err)
+	}
+	
 	return outPath
 }

@@ -202,17 +202,18 @@ spec:
   {{- end }}
   {{- $targetContentPath := ternary (printf "%s/tf" $targetBasePath) "/tf" (ne $targetBasePath "/") }}
   {{- $overlayConfigs := list }}
-  {{- /* Add cache as first overlay if enabled and mountAsOverlay is true */ -}}
-  {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
-    {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
-    {{- $cacheMount := printf "/mnt/overlays/%s" $cacheOverlayName }}
-    {{- $overlayConfigs = append $overlayConfigs (dict "name" $cacheOverlayName "sourcePath" $cacheMount) }}
-  {{- end }}
+  {{- /* Add user-defined overlays first */ -}}
   {{- range .Values.overlays }}
     {{- $sourcePath := trimPrefix "/" (default "" .sourcePath) }}
     {{- $baseMount := printf "/mnt/overlays/%s" .name }}
     {{- $overlaySource := ternary (printf "%s/%s" $baseMount $sourcePath) $baseMount (ne $sourcePath "") }}
     {{- $overlayConfigs = append $overlayConfigs (dict "name" .name "sourcePath" $overlaySource) }}
+  {{- end }}
+  {{- /* Add cache as last overlay if enabled and mountAsOverlay is true */ -}}
+  {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
+    {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
+    {{- $cacheMount := printf "/mnt/overlays/%s" $cacheOverlayName }}
+    {{- $overlayConfigs = append $overlayConfigs (dict "name" $cacheOverlayName "sourcePath" $cacheMount) }}
   {{- end }}
   {{- $excludePaths := list }}
   {{- range .Values.copyTemplates }}

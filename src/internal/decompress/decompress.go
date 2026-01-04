@@ -347,10 +347,10 @@ func (d *Decompressor) getOutputPath(bzipPath string) string {
 	var subDir string
 	absPath, _ := filepath.Abs(bzipPath)
 	pathLower := strings.ToLower(absPath)
-	
+
 	// Common TF2 content directories to preserve
 	contentDirs := []string{"maps", "cfg", "materials", "models", "sound", "particles", "resource", "scripts", "media", "custom"}
-	
+
 	for _, dir := range contentDirs {
 		// Look for /dirName/ in the path
 		pattern := fmt.Sprintf("/%s/", dir)
@@ -359,7 +359,7 @@ func (d *Decompressor) getOutputPath(bzipPath string) string {
 			break
 		}
 	}
-	
+
 	// Build output path
 	var outPath string
 	if subDir != "" {

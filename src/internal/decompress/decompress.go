@@ -79,34 +79,33 @@ func (d *Decompressor) scanAndDecompress(rootPath string) (int, int, error) {
 	var fileCount int
 	var splitMapCount int
 
-	// Read directory entries (non-recursive for efficiency)
-	entries, err := os.ReadDir(rootPath)
-	if err != nil {
-		return 0, 0, fmt.Errorf("read dir %s: %w", rootPath, err)
-	}
+	log.Printf("decompressor: scanning %s recursively", rootPath)
 
-	log.Printf("decompressor: scanning %d entries in %s", len(entries), rootPath)
-
-	for _, entry := range entries {
-		path := filepath.Join(rootPath, entry.Name())
+	// Walk the directory tree recursively
+	err = filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("decompressor: error accessing %s: %v", path, err)
+			return nil // Continue walking despite errors
+		}
 
 		// Check for split map folders
-		if entry.IsDir() {
-			lowerName := strings.ToLower(entry.Name())
+		if info.IsDir() {
+			lowerName := strings.ToLower(info.Name())
 			if strings.HasSuffix(lowerName, ".bsp") || strings.HasSuffix(lowerName, ".bsp.bz2.parts") {
 				log.Printf("decompressor: found split map folder: %s", path)
 				if err := d.processSplitMap(path); err != nil {
 					log.Printf("decompressor: error processing split map %s: %v", path, err)
-					continue
+				} else {
+					splitMapCount++
 				}
-				splitMapCount++
+				return filepath.SkipDir // Don't descend into split map folders
 			}
-			continue // Skip other directories
+			return nil // Continue into other directories
 		}
 
 		// Check if file ends with .bz2
-		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".bz2") {
-			continue
+		if !strings.HasSuffix(strings.ToLower(info.Name()), ".bz2") {
+			return nil
 		}
 
 		log.Printf("decompressor: found bz2 file: %s", path)
@@ -114,10 +113,15 @@ func (d *Decompressor) scanAndDecompress(rootPath string) (int, int, error) {
 		// Decompress the file
 		if err := d.decompressFile(path); err != nil {
 			log.Printf("decompressor: error decompressing %s: %v", path, err)
-			continue
+			return nil
 		}
 
 		fileCount++
+		return nil
+	})
+
+	if err != nil {
+		return fileCount, splitMapCount, fmt.Errorf("walk %s: %w", rootPath, err)
 	}
 
 	return fileCount, splitMapCount, nil

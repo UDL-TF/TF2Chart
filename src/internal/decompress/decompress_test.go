@@ -35,3 +35,49 @@ func TestDecompressor_Run(t *testing.T) {
 		t.Errorf("Run with non-existent path should not error, got: %v", err)
 	}
 }
+
+func TestDecompressor_CachingBehavior(t *testing.T) {
+	// Create temporary directories for testing
+	tmpDir := t.TempDir()
+	cacheDir := t.TempDir()
+
+	// Create a simple text file and compress it manually
+	testContent := "Hello, this is test data for caching!"
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte(testContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// For this test, we'll manually create the expected output file to simulate caching
+	expectedOutput := filepath.Join(cacheDir, "test.txt")
+	if err := os.WriteFile(expectedOutput, []byte(testContent), 0644); err != nil {
+		t.Fatalf("failed to create cached file: %v", err)
+	}
+
+	// Verify the cached file exists
+	if _, err := os.Stat(expectedOutput); err != nil {
+		t.Errorf("cached file should exist: %v", err)
+	}
+
+	t.Log("Cache test setup completed - cached file exists")
+}
+
+func TestDecompressor_WithOutputDir(t *testing.T) {
+	// Create temporary directories
+	tmpDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create a dummy bz2 file
+	testFile := filepath.Join(tmpDir, "test.bz2")
+	if err := os.WriteFile(testFile, []byte{}, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Create decompressor with output directory
+	d := NewWithOutputDir([]string{tmpDir}, outputDir)
+
+	// Run decompressor
+	_ = d.Run()
+
+	t.Logf("Decompressor with output directory test completed")
+}

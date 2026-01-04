@@ -129,14 +129,7 @@ func (d *Decompressor) scanAndDecompress(rootPath string) (int, int, error) {
 
 // decompressFile decompresses a .bz2 file
 func (d *Decompressor) decompressFile(bzipPath string) error {
-	// Open the bzip2 file
-	inFile, err := os.Open(bzipPath)
-	if err != nil {
-		return fmt.Errorf("open: %w", err)
-	}
-	defer inFile.Close()
-
-	// Determine output path
+	// Determine output path first
 	var outPath string
 	if d.outputDir != "" {
 		// Decompress to output directory, preserving structure
@@ -149,6 +142,19 @@ func (d *Decompressor) decompressFile(bzipPath string) error {
 			outPath = bzipPath[:len(bzipPath)-4]
 		}
 	}
+
+	// Check if decompressed file already exists (caching)
+	if _, err := os.Stat(outPath); err == nil {
+		log.Printf("decompressor: skipping %s (already decompressed at %s)", bzipPath, outPath)
+		return nil
+	}
+
+	// Open the bzip2 file
+	inFile, err := os.Open(bzipPath)
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	defer inFile.Close()
 
 	log.Printf("decompressor: decompressing %s -> %s", bzipPath, outPath)
 
@@ -200,6 +206,12 @@ func (d *Decompressor) processSplitMap(folderPath string) error {
 	} else {
 		// Output in-place
 		outputPath = filepath.Join(filepath.Dir(folderPath), outputName)
+	}
+
+	// Check if assembled file already exists (caching)
+	if _, err := os.Stat(outputPath); err == nil {
+		log.Printf("decompressor: skipping split map %s (already assembled at %s)", folderPath, outputPath)
+		return nil
 	}
 
 	// Read all files in the folder

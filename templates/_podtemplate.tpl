@@ -29,6 +29,11 @@ spec:
   {{- $decompImagePullPolicy := default "Always" $decompImage.pullPolicy }}
   {{- $decompScanBase := ne (default true $decompressor.scanBase) false }}
   {{- $decompScanOverlays := default (list) $decompressor.scanOverlays }}
+  {{- $decompCache := default (dict) $decompressor.cache }}
+  {{- $decompCacheEnabled := ne (default false $decompCache.enabled) false }}
+  {{- $decompCacheType := default "pvc" $decompCache.type }}
+  {{- $decompCacheHostPath := default "/var/lib/tf2/decomp-cache" $decompCache.hostPath }}
+  {{- $decompCacheHostPathType := default "DirectoryOrCreate" $decompCache.hostPathType }}
   {{- $permissionsInit := default (dict) .Values.permissionsInit }}
   {{- $permEnabled := and (ne (default true $permissionsInit.enabled) false) true }}
   {{- $permPathRaw := default "" $permissionsInit.path }}
@@ -197,6 +202,12 @@ spec:
   {{- end }}
   {{- $targetContentPath := ternary (printf "%s/tf" $targetBasePath) "/tf" (ne $targetBasePath "/") }}
   {{- $overlayConfigs := list }}
+  {{- /* Add cache as first overlay if enabled and mountAsOverlay is true */ -}}
+  {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
+    {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
+    {{- $cacheMount := printf "/mnt/overlays/%s" $cacheOverlayName }}
+    {{- $overlayConfigs = append $overlayConfigs (dict "name" $cacheOverlayName "sourcePath" $cacheMount) }}
+  {{- end }}
   {{- range .Values.overlays }}
     {{- $sourcePath := trimPrefix "/" (default "" .sourcePath) }}
     {{- $baseMount := printf "/mnt/overlays/%s" .name }}
@@ -264,6 +275,17 @@ spec:
         type: {{ .hostPathType | default "Directory" }}
       {{- end }}
     {{- end }}
+    {{- if and $decompEnabled $decompCacheEnabled }}
+    - name: decomp-cache
+      {{- if eq $decompCacheType "pvc" }}
+      persistentVolumeClaim:
+        claimName: {{ include "tf2chart.fullname" . }}-decomp-cache
+      {{- else if eq $decompCacheType "hostPath" }}
+      hostPath:
+        path: {{ $decompCacheHostPath }}
+        type: {{ $decompCacheHostPathType }}
+      {{- end }}
+    {{- end }}
     {{- with .Values.extraVolumes }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -292,6 +314,9 @@ spec:
         {{- end }}
         - {{ printf "-overlays=%s" (join "," $overlayPaths) }}
         {{- end }}
+        {{- if $decompCacheEnabled }}
+        - -output=/mnt/decomp-cache
+        {{- end }}
       {{- with $decompressor.resources }}
       resources:
         {{- toYaml . | nindent 8 }}
@@ -308,6 +333,10 @@ spec:
         {{- range $decompScanOverlays }}
         - name: layer-{{ . }}
           mountPath: /mnt/overlays/{{ . }}
+        {{- end }}
+        {{- if $decompCacheEnabled }}
+        - name: decomp-cache
+          mountPath: /mnt/decomp-cache
         {{- end }}
         {{- with $decompressor.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -336,6 +365,11 @@ spec:
           mountPath: /mnt/base
         - name: view-layer
           mountPath: {{ .Values.paths.containerTarget }}
+        {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
+        {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
+        - name: decomp-cache
+          mountPath: /mnt/overlays/{{ $cacheOverlayName }}
+        {{- end }}
         {{- range .Values.overlays }}
         - name: layer-{{ .name }}
           mountPath: /mnt/overlays/{{ .name }}
@@ -421,6 +455,12 @@ spec:
         - name: host-base
           mountPath: /mnt/base
           readOnly: true
+        {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
+        {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
+        - name: decomp-cache
+          mountPath: /mnt/overlays/{{ $cacheOverlayName }}
+          readOnly: true
+        {{- end }}
         {{- range .Values.overlays }}
         {{- $overlayReadOnly := default true .readOnly }}
         - name: layer-{{ .name }}
@@ -503,6 +543,12 @@ spec:
           readOnly: true
         - name: view-layer
           mountPath: {{ .Values.paths.containerTarget }}
+        {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
+        {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
+        - name: decomp-cache
+          mountPath: /mnt/overlays/{{ $cacheOverlayName }}
+          readOnly: true
+        {{- end }}
         {{- range .Values.overlays }}
         {{- $overlayReadOnly := default true .readOnly }}
         {{- if hasKey $decompWritableOverlays .name }}

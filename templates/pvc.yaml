@@ -1,0 +1,30 @@
+{{- $decompressor := default (dict) .Values.decompressor -}}
+{{- $cache := default (dict) $decompressor.cache -}}
+{{- $cacheEnabled := and (ne (default false $cache.enabled) false) (eq (default "pvc" $cache.type) "pvc") -}}
+{{- if $cacheEnabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "tf2chart.fullname" . }}-decomp-cache
+  labels:
+    {{- include "tf2chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: decompression-cache
+spec:
+  accessModes:
+    {{- range $cache.accessModes | default (list "ReadWriteOnce") }}
+    - {{ . }}
+    {{- end }}
+  {{- with $cache.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $cache.size | default "10Gi" }}
+  {{- with $cache.selector }}
+  selector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $cache.volumeName }}
+  volumeName: {{ . }}
+  {{- end }}
+{{- end }}

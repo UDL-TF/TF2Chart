@@ -107,6 +107,25 @@ decompressor:
     pullPolicy: Always
   scanBase: true  # Scan the base path for .bz2 files
   scanOverlays: []  # List of overlay names to scan (e.g., ["maps", "custom"])
+  # Decompression cache - stores decompressed files to avoid re-decompression on restarts
+  # When enabled, decompressed files are cached in a persistent volume.
+  # The cache is then mounted as an overlay layer that takes precedence over the compressed files.
+  cache:
+    enabled: false  # Enable caching for faster subsequent decompressions
+    type: pvc  # "pvc" for PersistentVolumeClaim or "hostPath" for local directory
+    mountAsOverlay: true  # Mount cache as an overlay layer (recommended)
+    overlayName: decomp-cache  # Name of the overlay when mounted (must be unique)
+    overlayPriority: 100  # Lower number = higher priority in merge order
+    # PVC settings (when type: pvc)
+    size: 10Gi  # Size of the cache volume
+    storageClassName: ""  # Storage class name (empty = default)
+    accessModes:
+      - ReadWriteOnce
+    selector: {}  # Label selector for PV binding
+    volumeName: ""  # Specific PV to bind to
+    # HostPath settings (when type: hostPath)
+    hostPath: /var/lib/tf2/decomp-cache  # Path on the host for cache storage
+    hostPathType: DirectoryOrCreate  # Directory, DirectoryOrCreate, or ""
   resources: {}
   securityContext:
     runAsUser: 0

@@ -27,7 +27,10 @@ spec:
   {{- $decompImageRepo := default "ghcr.io/udl-tf/tf2chart-decompressor" $decompImage.repository }}
   {{- $decompImageTag := default "latest" $decompImage.tag }}
   {{- $decompImagePullPolicy := default "Always" $decompImage.pullPolicy }}
-  {{- $decompScanBase := ne (default true $decompressor.scanBase) false }}
+  {{- $decompScanBase := true }}
+  {{- if hasKey $decompressor "scanBase" }}
+    {{- $decompScanBase = $decompressor.scanBase }}
+  {{- end }}
   {{- $decompScanOverlays := default (list) $decompressor.scanOverlays }}
   {{- $decompCache := default (dict) $decompressor.cache }}
   {{- $decompCacheEnabled := ne (default false $decompCache.enabled) false }}

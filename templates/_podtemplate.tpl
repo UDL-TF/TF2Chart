@@ -313,8 +313,21 @@ spec:
         {{- end }}
         {{- if gt (len $decompScanOverlays) 0 }}
         {{- $overlayPaths := list }}
-        {{- range $decompScanOverlays }}
-        {{- $overlayPaths = append $overlayPaths (printf "/mnt/overlays/%s" .) }}
+        {{- range $overlayName := $decompScanOverlays }}
+        {{- $overlayPath := printf "/mnt/overlays/%s" $overlayName }}
+        {{- /* Find the overlay config to get sourcePath */ -}}
+        {{- $sourcePath := "" }}
+        {{- range $.Values.overlays }}
+        {{- if eq .name $overlayName }}
+        {{- $sourcePath = default "" .sourcePath }}
+        {{- end }}
+        {{- end }}
+        {{- /* Build overlay path with optional subpath */ -}}
+        {{- if $sourcePath }}
+        {{- $overlayPaths = append $overlayPaths (printf "%s:%s" $overlayPath $sourcePath) }}
+        {{- else }}
+        {{- $overlayPaths = append $overlayPaths $overlayPath }}
+        {{- end }}
         {{- end }}
         - {{ printf "-overlays=%s" (join "," $overlayPaths) }}
         {{- end }}

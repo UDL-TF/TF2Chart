@@ -33,7 +33,23 @@ func main() {
 		for _, path := range strings.Split(*overlayPaths, ",") {
 			trimmed := strings.TrimSpace(path)
 			if trimmed != "" {
-				pathsToScan = append(pathsToScan, trimmed)
+				// Check if path contains a subpath separator (format: /base/path:subpath)
+				parts := strings.SplitN(trimmed, ":", 2)
+				basePath := parts[0]
+
+				if len(parts) == 2 && parts[1] != "" {
+					// Subpath specified, append it to the base path
+					subPath := strings.TrimPrefix(parts[1], "/")
+					fullPath := basePath
+					if subPath != "" {
+						fullPath = basePath + "/" + subPath
+					}
+					pathsToScan = append(pathsToScan, fullPath)
+					log.Printf("decompressor: overlay %s with subpath %s -> scanning %s", basePath, parts[1], fullPath)
+				} else {
+					// No subpath, use the base path as-is
+					pathsToScan = append(pathsToScan, basePath)
+				}
 			}
 		}
 	}

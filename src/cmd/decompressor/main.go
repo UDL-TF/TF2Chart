@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	basePath := flag.String("base", "/mnt/base", "base path to check for .bz2 files")
+	basePath := flag.String("base", "", "base path to check for .bz2 files")
 	overlayPaths := flag.String("overlays", "", "comma-separated overlay paths to check (e.g., /mnt/overlays/maps,/mnt/overlays/custom)")
 	outputDir := flag.String("output", "", "output directory for decompressed files (preserves structure from source paths). If empty, decompresses in-place.")
 	flag.Parse()

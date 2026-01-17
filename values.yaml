@@ -109,7 +109,8 @@ decompressor:
   scanOverlays: []  # List of overlay names to scan (e.g., ["maps", "custom"])
   # Decompression cache - stores decompressed files to avoid re-decompression on restarts
   # When enabled, decompressed files are cached in a persistent volume.
-  # The cache is then mounted as an overlay layer that takes precedence over the compressed files.
+  # The cache is then mounted as an overlay layer that provides decompressed files.
+  # NOTE: Cache is added as the LAST overlay (lowest priority) so user overlays take precedence.
   cache:
     enabled: false  # Enable caching for faster subsequent decompressions
     type: pvc  # "pvc" for PersistentVolumeClaim or "hostPath" for local directory
@@ -206,14 +207,32 @@ writablePaths:
 # template and accept runtime edits without touching the original overlay.
 # Set onlyOnInit: true to copy only during initial merge and skip watcher re-merges,
 # allowing the TF2 server to modify files without them being overwritten.
+# 
+# IMPORTANT: targetPath should be RELATIVE (no leading slash)
+# IMPORTANT: When copying from base, omit 'overlay' field - sourceMount defaults to /mnt/base
 copyTemplates: []
-  # - targetPath: tf/addons/sourcemod/configs/sourcebans
-  #   overlay: serverfiles-base
-  #   sourcePath: serverfiles/base/addons/sourcemod/configs/sourcebans
+  # Example 1: Copy from base path (paths.hostSource)
+  # When overlay and sourceMount are omitted, defaults to /mnt/base (your base path)
+  # - targetPath: tf/addons/sourcemod/configs/sourcebans  # ✓ Relative path (no leading /)
+  #   sourcePath: tf/test-two/sourcebans  # Path within base (/tf/standalone/tf/test-two/sourcebans)
   #   cleanTarget: true
   #   targetMode: writable
   #   onlyOnInit: true  # Skip copying during watcher re-merges
-  #   sourceMount: /mnt/overlays/serverfiles-base
+  
+  # Example 2: Copy from a named overlay
+  # - targetPath: tf/addons/sourcemod/configs/sourcebans
+  #   overlay: serverfiles  # Copy from the "serverfiles" overlay
+  #   sourcePath: serverfiles/base/addons/sourcemod/configs/sourcebans
+  #   cleanTarget: true
+  #   targetMode: writable
+  #   onlyOnInit: true
+  
+  # Example 3: Explicit sourceMount (advanced)
+  # - targetPath: tf/custom
+  #   sourceMount: /mnt/overlays/serverfiles-base  # Explicit mount path
+  #   sourcePath: custom
+  #   cleanTarget: true
+  #   targetMode: view  # Copy to view layer (read-only merge)
 
 hostNetwork: false
 dnsPolicy: ""

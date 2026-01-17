@@ -259,15 +259,25 @@ func copyDirectory(src, dest string, clean bool) error {
 			return os.MkdirAll(target, dirMode(d))
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			linkTarget, err := os.Readlink(path)
+			// Dereference the symlink and copy the actual file content
+			realPath, err := filepath.EvalSymlinks(path)
 			if err != nil {
-				return err
+				return fmt.Errorf("resolve symlink %s: %w", path, err)
 			}
-			log.Printf("copyDirectory: copying symlink %s -> %s to %s", path, linkTarget, target)
-			if err := os.Symlink(linkTarget, target); err != nil {
-				return err
+			realInfo, err := os.Stat(realPath)
+			if err != nil {
+				return fmt.Errorf("stat symlink target %s: %w", realPath, err)
 			}
-			return nil
+			if realInfo.IsDir() {
+				log.Printf("copyDirectory: skipping symlink to directory %s -> %s", path, realPath)
+				return nil
+			}
+			log.Printf("copyDirectory: dereferencing symlink %s -> %s, copying actual file to %s", path, realPath, target)
+			// Remove any existing file or symlink at the target
+			if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Printf("copyDirectory: warning - failed to remove existing target %s: %v", target, err)
+			}
+			return copyFile(realPath, target, realInfo.Mode().Perm())
 		}
 		log.Printf("copyDirectory: copying file %s to %s", path, target)
 		// Remove any existing file or symlink at the target

@@ -170,7 +170,7 @@ func TestCopyTemplateFromBasePath(t *testing.T) {
 			{
 				// When sourceMount is not specified, it defaults to "/mnt/base"
 				// In tests, this translates to using the base directory
-				SourceMount: base,                    // Simulates /mnt/base
+				SourceMount: base,                     // Simulates /mnt/base
 				SourcePath:  "tf/test-two/sourcebans", // Path within base
 				TargetPath:  "tf/addons/sourcemod/configs/sourcebans",
 				Clean:       true,
@@ -190,7 +190,7 @@ func TestCopyTemplateFromBasePath(t *testing.T) {
 
 	// Verify files were copied to the target location
 	targetDir := filepath.Join(targetContent, "addons", "sourcemod", "configs", "sourcebans")
-	
+
 	// Check that all files exist
 	checkFile := func(relPath, expectedContent string) {
 		fullPath := filepath.Join(targetDir, relPath)
@@ -258,7 +258,7 @@ func TestCopyTemplateFromBasePathWritableMode(t *testing.T) {
 
 	// With targetMode "writable", files should be in targetContent/custom-configs
 	targetDir := filepath.Join(targetContent, "custom-configs")
-	
+
 	verifyFile := func(filename, expectedContent string) {
 		fullPath := filepath.Join(targetDir, filename)
 		content, err := os.ReadFile(fullPath)
@@ -334,10 +334,10 @@ func TestCopyTemplateDereferencesSymlinks(t *testing.T) {
 
 	// Verify files were copied as physical files, not symlinks
 	targetDir := filepath.Join(targetContent, "configs")
-	
+
 	checkPhysicalFile := func(relPath, expectedContent string) {
 		fullPath := filepath.Join(targetDir, relPath)
-		
+
 		// Verify it's NOT a symlink
 		info, err := os.Lstat(fullPath)
 		if err != nil {
@@ -346,7 +346,7 @@ func TestCopyTemplateDereferencesSymlinks(t *testing.T) {
 		if info.Mode()&os.ModeSymlink != 0 {
 			t.Fatalf("expected physical file at %s, got symlink", fullPath)
 		}
-		
+
 		// Verify content
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
@@ -423,5 +423,57 @@ func TestCopyTemplateOnlyOnInit(t *testing.T) {
 	}
 	if string(content) != "modified by server" {
 		t.Errorf("file should not be overwritten on second run: got %q", string(content))
+	}
+}
+
+func TestOverlayCustomTargetPath(t *testing.T) {
+	base := t.TempDir()
+	targetBase := filepath.Join(t.TempDir(), "view")
+	targetContent := filepath.Join(targetBase, "tf")
+	customTargetPath := filepath.Join(targetBase, "tf", "maps")
+	if err := os.MkdirAll(targetContent, 0o755); err != nil {
+		t.Fatalf("mkdir target content: %v", err)
+	}
+	if err := os.MkdirAll(customTargetPath, 0o755); err != nil {
+		t.Fatalf("mkdir custom target path: %v", err)
+	}
+
+	// Create overlay with nested structure
+	overlay := t.TempDir()
+	overlayMapsDir := filepath.Join(overlay, "serverfiles", "dodgeball", "base", "maps")
+	if err := os.MkdirAll(overlayMapsDir, 0o755); err != nil {
+		t.Fatalf("mkdir overlay maps dir: %v", err)
+	}
+	writeFile(t, filepath.Join(overlayMapsDir, "test_map.bsp"), "map content")
+
+	cfg := &config.MergeConfig{
+		BasePath:      base,
+		TargetBase:    targetBase,
+		TargetContent: targetContent,
+		Overlays: []config.Overlay{{
+			Name:       "serverfiles-base-maps",
+			SourcePath: filepath.Join(overlay, "serverfiles", "dodgeball", "base", "maps"),
+			TargetPath: customTargetPath,
+		}},
+		Permissions: config.PermissionPhase{},
+	}
+	m, err := New(cfg)
+	if err != nil {
+		t.Fatalf("new merger: %v", err)
+	}
+	if err := m.Run(context.Background()); err != nil {
+		t.Fatalf("run merge: %v", err)
+	}
+
+	// Verify the map file is placed in the custom target path
+	expectedFile := filepath.Join(customTargetPath, "test_map.bsp")
+	if _, err := os.Stat(expectedFile); err != nil {
+		t.Errorf("expected map file not found at custom target path: %v", err)
+	}
+
+	// Verify it's NOT in the default location (preserving structure)
+	unwantedFile := filepath.Join(targetContent, "serverfiles", "dodgeball", "base", "maps", "test_map.bsp")
+	if _, err := os.Stat(unwantedFile); !os.IsNotExist(err) {
+		t.Errorf("map file should not exist in default structured path: %s", unwantedFile)
 	}
 }

@@ -210,7 +210,11 @@ spec:
     {{- $sourcePath := trimPrefix "/" (default "" .sourcePath) }}
     {{- $baseMount := printf "/mnt/overlays/%s" .name }}
     {{- $overlaySource := ternary (printf "%s/%s" $baseMount $sourcePath) $baseMount (ne $sourcePath "") }}
-    {{- $overlayConfigs = append $overlayConfigs (dict "name" .name "sourcePath" $overlaySource) }}
+    {{- $overlayDict := dict "name" .name "sourcePath" $overlaySource }}
+    {{- if .targetPath }}
+      {{- $_ := set $overlayDict "targetPath" .targetPath }}
+    {{- end }}
+    {{- $overlayConfigs = append $overlayConfigs $overlayDict }}
   {{- end }}
   {{- /* Add cache as last overlay if enabled and mountAsOverlay is true */ -}}
   {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}

@@ -29,6 +29,7 @@ type MergeConfig struct {
 type Overlay struct {
 	Name       string `json:"name"`
 	SourcePath string `json:"sourcePath"`
+	TargetPath string `json:"targetPath,omitempty"` // Optional custom target path, defaults to TargetContent if empty
 }
 
 // WritablePath configures passthrough directories that should stay writable.

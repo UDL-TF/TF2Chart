@@ -66,7 +66,12 @@ func (m *Merger) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		if err := mergeTree(ov.SourcePath, m.cfg.TargetContent, m.cfg.ExcludePaths); err != nil {
+		// Use custom target path if specified, otherwise default to TargetContent
+		targetPath := m.cfg.TargetContent
+		if ov.TargetPath != "" {
+			targetPath = ov.TargetPath
+		}
+		if err := mergeTree(ov.SourcePath, targetPath, m.cfg.ExcludePaths); err != nil {
 			return fmt.Errorf("merge overlay %s: %w", ov.Name, err)
 		}
 	}

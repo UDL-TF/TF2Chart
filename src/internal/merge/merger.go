@@ -70,7 +70,12 @@ func (m *Merger) Run(ctx context.Context) error {
 		targetPath := m.cfg.TargetContent
 		if ov.TargetPath != "" {
 			targetPath = ov.TargetPath
+			log.Printf("overlay %s: using custom target path: %s", ov.Name, targetPath)
+		} else {
+			log.Printf("overlay %s: using default target path: %s", ov.Name, targetPath)
 		}
+
+		log.Printf("overlay %s: merging from %s to %s", ov.Name, ov.SourcePath, targetPath)
 		if err := mergeTree(ov.SourcePath, targetPath, m.cfg.ExcludePaths); err != nil {
 			return fmt.Errorf("merge overlay %s: %w", ov.Name, err)
 		}
@@ -101,6 +106,7 @@ func (m *Merger) Run(ctx context.Context) error {
 }
 
 func mergeTree(src, dest string, excludePaths []string) error {
+	log.Printf("mergeTree: checking source %s -> dest %s", src, dest)
 	info, err := os.Stat(src)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -112,6 +118,7 @@ func mergeTree(src, dest string, excludePaths []string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("source %s is not a directory", src)
 	}
+	log.Printf("mergeTree: %s exists, proceeding with merge to %s", src, dest)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
@@ -122,7 +129,9 @@ func mergeTree(src, dest string, excludePaths []string) error {
 		excludeMap[filepath.Clean(excl)] = true
 	}
 
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+	fileCount := 0
+	dirCount := 0
+	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -146,10 +155,16 @@ func mergeTree(src, dest string, excludePaths []string) error {
 
 		target := filepath.Join(dest, rel)
 		if d.IsDir() {
+			dirCount++
 			return os.MkdirAll(target, dirMode(d))
 		}
 		if !d.Type().IsRegular() {
 			return nil
+		}
+
+		fileCount++
+		if fileCount <= 5 { // Log first few files to avoid spam
+			log.Printf("mergeTree: processing file %d: %s -> %s", fileCount, path, target)
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
@@ -163,6 +178,9 @@ func mergeTree(src, dest string, excludePaths []string) error {
 		}
 		return nil
 	})
+
+	log.Printf("mergeTree: completed %s -> %s: processed %d files, %d directories", src, dest, fileCount, dirCount)
+	return err
 }
 
 func ensureWritablePaths(target string, paths []config.WritablePath) error {

@@ -220,7 +220,11 @@ spec:
   {{- if and $decompCacheEnabled (ne (default true $decompCache.mountAsOverlay) false) }}
     {{- $cacheOverlayName := default "decomp-cache" $decompCache.overlayName }}
     {{- $cacheMount := printf "/mnt/overlays/%s" $cacheOverlayName }}
-    {{- $overlayConfigs = append $overlayConfigs (dict "name" $cacheOverlayName "sourcePath" $cacheMount) }}
+    {{- $cacheOverlayDict := dict "name" $cacheOverlayName "sourcePath" $cacheMount }}
+    {{- if $decompCache.targetPath }}
+      {{- $_ := set $cacheOverlayDict "targetPath" $decompCache.targetPath }}
+    {{- end }}
+    {{- $overlayConfigs = append $overlayConfigs $cacheOverlayDict }}
   {{- end }}
   {{- $excludePaths := list }}
   {{- range .Values.copyTemplates }}

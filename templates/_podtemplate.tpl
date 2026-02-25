@@ -438,6 +438,10 @@ spec:
     {{- include "tf2chart.permissionsInitContainer" (dict "name" $permPostName "image" $permImage "pullPolicy" $permImagePullPolicy "path" $permPostPath "user" $permUser "group" $permGroup "mode" $permMode "volumeName" $permPostVolume "mountPath" $permPostMount) | nindent 4 }}
     {{- end }}
   {{- end }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   containers:
     - name: app
       image: {{ printf "%s:%s" .Values.app.image.repository .Values.app.image.tag }}

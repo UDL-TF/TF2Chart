@@ -71,6 +71,10 @@ type WatcherConfig struct {
 	Events              []string `json:"events,omitempty"`
 	DebounceSeconds     int      `json:"debounceSeconds"`
 	PollIntervalSeconds int      `json:"pollIntervalSeconds"`
+	// MaxProcs limits the Go runtime thread count (GOMAXPROCS). 0 = use runtime default (all CPUs).
+	MaxProcs int `json:"maxProcs,omitempty"`
+	// PprofAddr enables a pprof HTTP server at this address, e.g. ":6060".
+	PprofAddr string `json:"pprofAddr,omitempty"`
 }
 
 // PermissionJob defines a single chmod/chown pass executed inside an init container.

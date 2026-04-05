@@ -5,7 +5,10 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"net/http"
+	_ "net/http/pprof" // register pprof handlers on DefaultServeMux
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/UDL-TF/TF2Chart/src/internal/config"
@@ -43,6 +46,20 @@ func main() {
 		watchCfg = &config.WatcherConfig{}
 	}
 	log.Printf("watch config summary: paths=%d events=%d debounce=%ds poll=%ds", len(watchCfg.WatchPaths), len(watchCfg.Events), watchCfg.DebounceSeconds, watchCfg.PollIntervalSeconds)
+
+	if watchCfg.MaxProcs > 0 {
+		runtime.GOMAXPROCS(watchCfg.MaxProcs)
+		log.Printf("watcher: GOMAXPROCS limited to %d", watchCfg.MaxProcs)
+	}
+
+	if watchCfg.PprofAddr != "" {
+		go func() {
+			log.Printf("watcher: starting pprof server on %s", watchCfg.PprofAddr)
+			if err := http.ListenAndServe(watchCfg.PprofAddr, nil); err != nil {
+				log.Printf("watcher: pprof server error: %v", err)
+			}
+		}()
+	}
 
 	manager, err := watch.NewManager(merger, watchCfg)
 	if err != nil {

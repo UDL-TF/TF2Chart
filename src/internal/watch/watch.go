@@ -15,9 +15,10 @@ import (
 
 // Manager wires filesystem events into merger runs.
 type Manager struct {
-	merger   *merge.Merger
-	cfg      *config.WatcherConfig
-	debounce time.Duration
+	merger     *merge.Merger
+	cfg        *config.WatcherConfig
+	debounce   time.Duration
+	lastMtimes map[string]time.Time // snapshot of watch-path mtimes after last merge
 }
 
 // NewManager creates a watcher manager.
@@ -29,7 +30,12 @@ func NewManager(merger *merge.Merger, cfg *config.WatcherConfig) (*Manager, erro
 		cfg = &config.WatcherConfig{}
 	}
 	debounce := time.Second * time.Duration(max(cfg.DebounceSeconds, 1))
-	return &Manager{merger: merger, cfg: cfg, debounce: debounce}, nil
+	return &Manager{
+		merger:     merger,
+		cfg:        cfg,
+		debounce:   debounce,
+		lastMtimes: make(map[string]time.Time),
+	}, nil
 }
 
 // Run blocks until the context is cancelled and reacts to filesystem events.
@@ -39,6 +45,10 @@ func (m *Manager) Run(ctx context.Context) error {
 		return fmt.Errorf("initial merge: %w", err)
 	}
 	log.Printf("watcher: initial merge completed successfully")
+
+	// Snapshot mtimes after the initial merge so subsequent polls only
+	// trigger a re-merge when something actually changes on disk.
+	m.snapshotMtimes()
 
 	mergeRequests := make(chan struct{}, 1)
 	immediateRequests := make(chan struct{}, 1)
@@ -50,7 +60,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		pollInterval = 10 * time.Second // Default to 10 seconds
 	}
 
-	log.Printf("watcher: using poll-only mode (interval=%s)", pollInterval)
+	log.Printf("watcher: using poll-only mode with change detection (interval=%s, watching %d paths)", pollInterval, len(m.cfg.WatchPaths))
 	pollTicker := time.NewTicker(pollInterval)
 	defer pollTicker.Stop()
 
@@ -59,9 +69,45 @@ func (m *Manager) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-pollTicker.C:
-			m.requestImmediate(immediateRequests)
+			if m.hasChanges() {
+				log.Printf("watcher: changes detected in watch paths, triggering merge")
+				m.requestImmediate(immediateRequests)
+			}
 		}
 	}
+}
+
+// snapshotMtimes records the current mtime of every configured watch path.
+func (m *Manager) snapshotMtimes() {
+	for _, p := range m.cfg.WatchPaths {
+		if info, err := os.Stat(p); err == nil {
+			m.lastMtimes[p] = info.ModTime()
+		} else {
+			delete(m.lastMtimes, p)
+		}
+	}
+}
+
+// hasChanges returns true when at least one watch path has a different mtime
+// than the last recorded snapshot, then updates the snapshot in-place.
+func (m *Manager) hasChanges() bool {
+	changed := false
+	for _, p := range m.cfg.WatchPaths {
+		info, err := os.Stat(p)
+		if err != nil {
+			// Path disappeared since last snapshot.
+			if _, known := m.lastMtimes[p]; known {
+				delete(m.lastMtimes, p)
+				changed = true
+			}
+			continue
+		}
+		if last, ok := m.lastMtimes[p]; !ok || info.ModTime().After(last) {
+			m.lastMtimes[p] = info.ModTime()
+			changed = true
+		}
+	}
+	return changed
 }
 
 func (m *Manager) mergeLoop(ctx context.Context, scheduled <-chan struct{}, immediate <-chan struct{}) {

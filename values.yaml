@@ -79,6 +79,12 @@ merger:
     watchPaths: []
     watchParentDepth: 1  # Watch parent directories for git-sync atomic swaps
     extraWatchPaths: []  # Additional paths to monitor beyond auto-detected overlays
+    # Limit the Go runtime to N OS threads (GOMAXPROCS). 0 = use all available CPUs.
+    # Set to 1 or 2 to cap CPU usage on servers where the watcher competes with the game.
+    maxProcs: 2
+    # Enable a pprof HTTP profiling server at this address, e.g. ":6060".
+    # Leave empty to disable. Use with kubectl port-forward for performance analysis.
+    pprofAddr: ":6060"
     command: []
     args: []
     env: []

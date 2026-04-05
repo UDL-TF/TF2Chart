@@ -257,7 +257,7 @@ spec:
     {{- end }}
   {{- end }}
   {{- $mergeConfig := dict "basePath" "/mnt/base" "targetBase" $targetBasePath "targetContent" $targetContentPath "overlays" $overlayConfigs "writablePaths" $writablePaths "copyTemplates" $templateCopies "permissions" $mergePermissions "excludePaths" $excludePaths "decompressPaths" $decompressPaths }}
-  {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval }}
+  {{- $watcherConfig := dict "watchPaths" $watchPaths "events" $watchEvents "debounceSeconds" $debounceSeconds "pollIntervalSeconds" $pollInterval "maxProcs" (int (default 0 $watcherValues.maxProcs)) "pprofAddr" (default "" $watcherValues.pprofAddr) }}
   {{- with .Values.podSecurityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
